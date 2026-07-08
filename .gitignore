@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/skills/
+data/skills-staging/
+.env
+*.tsbuildinfo

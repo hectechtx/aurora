@@ -1,0 +1,51 @@
+{
+  "name": "aurora",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "scripts": {
+    "postinstall": "npm rebuild better-sqlite3 || true",
+    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "check": "tsc",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.60.5",
+    "better-sqlite3": "^11.7.0",
+    "clsx": "^2.1.1",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
+    "drizzle-zod": "^0.7.0",
+    "express": "^5.0.1",
+    "lucide-react": "^0.453.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss-animate": "^1.0.7",
+    "tar": "^7.5.19",
+    "wouter": "^3.3.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.19.27",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.31.8",
+    "esbuild": "^0.25.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.5",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

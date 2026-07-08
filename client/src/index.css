@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 224 28% 7%;
+  --foreground: 210 20% 94%;
+  --border: 222 16% 17%;
+  --border-subtle: 222 16% 14%;
+  --card: 223 22% 10%;
+  --card-foreground: 210 20% 94%;
+  --surface: 223 20% 12.5%;
+  --primary: 189 85% 56%;
+  --primary-hover: 189 85% 62%;
+  --primary-foreground: 224 28% 7%;
+  --muted: 222 16% 15%;
+  --muted-foreground: 217 12% 60%;
+  --accent: 262 65% 68%;
+  --accent-foreground: 224 28% 7%;
+  --destructive: 0 72% 58%;
+  --destructive-foreground: 210 20% 96%;
+  --risk-low: 152 55% 45%;
+  --risk-medium: 38 92% 56%;
+  --risk-high: 0 72% 60%;
+  --ring: 189 85% 56%;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 16px -4px rgb(0 0 0 / 0.45), 0 0 0 1px hsl(var(--border) / 0.6);
+  --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.35), 0 0 24px -6px hsl(var(--primary) / 0.35);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, hsl(var(--primary) / 0.06), transparent 60%),
+    radial-gradient(1000px 500px at 100% 0%, hsl(var(--accent) / 0.05), transparent 55%),
+    hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.3);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
+
+@layer utilities {
+  .animate-in {
+    animation: fade-slide-in 0.25s var(--ease) both;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+@keyframes fade-slide-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.skeleton {
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}

@@ -9,7 +9,10 @@ Architecture pattern borrowed from the `evo-jarvis-src` project (Express + Vite 
 1. Install [Ollama](https://ollama.com) and start it: `ollama serve`
 2. `npm install`
 3. `npm run dev` → opens on `http://localhost:4700` (walks to the next free port if taken)
-4. Go to **Settings**, pull a tool-calling-capable model (`llama3.1`, `qwen2.5`, `mistral-nemo`, etc.) and select it as active
+4. First run asks you to set a PIN — it's the only thing gating access to the vessel's tools on this device, and there's no recovery flow if you forget it
+5. Go to **Settings**, pull a tool-calling-capable model (`llama3.1`, `qwen2.5`, `mistral-nemo`, etc.) and select it as active
+
+Bound to `127.0.0.1` only, by design — nothing else on your network can reach it, PIN or not.
 
 ## How it works
 
@@ -20,9 +23,14 @@ Architecture pattern borrowed from the `evo-jarvis-src` project (Express + Vite 
 - **Agents** — persistent named workers, separate from Tasks. Each has its own persona, job description, perpetual private memory (see Agents section below), and a suggestion queue it works through on its own schedule (or only when you hit "Run now"). Built on the exact same engine as Tasks — the only difference is where things get persisted.
 - **Outbox** — finished content agents produce via `save_deliverable` (title, description, tags, body, optional thumbnail) lands here for you to copy and post yourself. Nothing is ever posted automatically.
 - **Skills** — install a capability by pointing at a GitHub repo (`owner/repo`, a full URL, optionally a branch/tag and subpath). The repo must have a `skill.json` manifest at its root (or the given subpath) declaring the tools it exposes — see `server/skills/manifest.ts` for the schema. Every install lands in **Approvals** first, showing the full manifest and file listing before any downloaded code runs.
-- **Approvals** — anything high-risk (raw shell/Node/Python execution, terminal requests, skill installs, any skill tool declared `risk: "high"`) always waits here, whether it came from a Task or an Agent. Everything else auto-runs when Autonomy is set to "Supervised" (the default); set it to "Manual" to require approval on every tool call.
+- **Approvals** — anything high-risk (raw shell/Node/Python execution, terminal requests, skill installs, any skill tool declared `risk: "high"`) always waits here, whether it came from a Task or an Agent. Everything else auto-runs when Autonomy is set to "Supervised" (the default); set it to "Manual" to require approval on every tool call. Each entry shows a plain-language description of what it actually does, not just raw JSON args.
 - **Audit Log** — a durable record of everything the vessel did or was asked to do.
-- **Settings** — Ollama host/model, image-gen host, autonomy level, voice, and the system prompt/persona (defaults to a sassy, playful, direct young-woman persona — edit freely).
+- **Settings** — Ollama host/model, image-gen host, autonomy level, voice, the system prompt/persona (defaults to a sassy, playful, direct young-woman persona — edit freely), and Security (change PIN, log out).
+
+## Security
+
+- **PIN** — set on first run, gates every `/api/*` route. Sessions are Bearer tokens held in server memory (30-day TTL) — restarting the server signs everyone out.
+- **Advanced tools** — off by default in Settings. While off, the Terminal page and GitHub skill installation are disabled outright (not just approval-gated) — raw shell/Node/Python execution and running code downloaded from a repo are both real risks, so they require an explicit, informed opt-in beyond the normal approvals queue.
 
 ## Agents
 
@@ -48,3 +56,19 @@ A skill is a git repo with:
 - The entrypoint reads one JSON line from stdin — `{"tool": "<name>", "args": {...}}` — and must print a single JSON value to stdout as the result.
 
 Skills run as a plain Node child process in their own directory with the owner's OS privileges — there's no network sandbox, only a filesystem one. The real safety boundary is your review of the manifest and file listing at install time, not the runtime.
+
+## Building the desktop app
+
+AURORA also packages as a real Electron desktop app — same server, same UI, just hosted in a native window instead of a browser tab, with a tray icon so closing the window doesn't kill running agents. A packaged build stores its data in Electron's per-user folder (`%APPDATA%\aurora\data` on Windows), completely separate from the `./data` folder `npm run dev` uses.
+
+- `npm run electron:dev` — builds and launches the Electron shell locally, for a quick check.
+- `npm run dist` — builds a real installer into `release/` (`AURORA Setup <version>.exe` on Windows, via `electron-builder` + NSIS). Unsigned — Windows SmartScreen will warn on first run ("More info" → "Run anyway"). Real code signing needs a paid cert tied to a legal identity; not set up here.
+
+**Native module ABI gotcha:** `better-sqlite3` has to be compiled against whichever runtime is going to load it — Node for the CLI (`npm run dev` / `npm start`), Electron for the packaged app — and the two are *not* binary-compatible. Building/testing the Electron app leaves the module compiled for Electron, which breaks `npm run dev` until it's rebuilt back:
+
+```
+npm run rebuild:electron   # before npm run electron:dev — npm run dist does this itself
+npm run rebuild:node       # after, to go back to using npm run dev / npm start
+```
+
+If `npm run dev` suddenly throws a `NODE_MODULE_VERSION` mismatch error, this is why — run `npm run rebuild:node`.

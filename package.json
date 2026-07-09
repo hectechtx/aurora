@@ -3,20 +3,25 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
+  "main": "dist/electron/main.js",
   "engines": {
     "node": "20.x || 22.x || 24.x"
   },
   "scripts": {
     "postinstall": "npm rebuild better-sqlite3 || true",
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js",
+    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js && esbuild electron/main.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/electron/main.js",
     "start": "cross-env NODE_ENV=production node dist/index.js",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "electron:dev": "npm run build && npm run rebuild:electron && electron .",
+    "dist": "npm run build && electron-builder --publish=never",
     "check": "tsc",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.60.5",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.11.1",
     "clsx": "^2.1.1",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.7",
@@ -41,11 +46,49 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.8",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
+  },
+  "allowScripts": {
+    "electron@43.1.0": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true,
+    "electron-winstaller@5.4.0": true,
+    "better-sqlite3@12.11.1": true
+  },
+  "build": {
+    "appId": "com.aurora.vessel",
+    "productName": "AURORA",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/electron/**/*",
+      "dist/public/**/*",
+      "electron/assets/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }

@@ -7,10 +7,9 @@ import * as tar from "tar";
 import { getStorage } from "../storage";
 import { loadManifest, listSkillFiles, ManifestError } from "./manifest";
 import type { InstalledSkill } from "@shared/schema";
+import { STAGING_DIR, SKILLS_DIR } from "../paths";
 
-const DATA_DIR = path.resolve(process.cwd(), "data");
-export const STAGING_DIR = path.join(DATA_DIR, "skills-staging");
-export const SKILLS_DIR = path.join(DATA_DIR, "skills");
+export { STAGING_DIR, SKILLS_DIR };
 
 fs.mkdirSync(STAGING_DIR, { recursive: true });
 fs.mkdirSync(SKILLS_DIR, { recursive: true });

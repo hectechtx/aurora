@@ -176,6 +176,14 @@ export const agentConfig = sqliteTable("agent_config", {
   ),
   autonomy: text("autonomy").notNull().default("supervised"), // manual | supervised
   imageGenHost: text("image_gen_host").notNull().default(""), // Automatic1111/ComfyUI-compatible base URL, empty = disabled
+  pinHash: text("pin_hash").notNull().default(""), // scrypt hash, empty = no PIN set yet (first-run setup required)
+  pinSalt: text("pin_salt").notNull().default(""),
+  // Gates the most dangerous capabilities (raw shell/Node/Python execution,
+  // installing skills from GitHub, and any tool — built-in or skill-provided
+  // — declared risk "high"). Off by default: a stranger who's just installed
+  // AURORA shouldn't have code-execution tools available until they've
+  // explicitly opted in after understanding what that means.
+  advancedToolsEnabled: integer("advanced_tools_enabled", { mode: "boolean" }).notNull().default(false),
 });
 
 // ---- Insert schemas ----
@@ -250,6 +258,23 @@ export const agentConfigUpdateSchema = z.object({
   systemPrompt: z.string().max(4000).optional(),
   autonomy: z.enum(["manual", "supervised"]).optional(),
   imageGenHost: z.string().max(300).optional(),
+  advancedToolsEnabled: z.boolean().optional(),
+});
+
+// PIN is deliberately simple (4-12 digits) — this is a local single-user
+// gate against "someone else on this machine/network", not a real password
+// system. No usernames, no recovery flow by design (see server/auth.ts).
+export const authSetupSchema = z.object({
+  pin: z.string().min(4).max(12).regex(/^\d+$/, "digits only"),
+});
+
+export const authLoginSchema = z.object({
+  pin: z.string().min(1).max(12),
+});
+
+export const authChangePinSchema = z.object({
+  currentPin: z.string().min(1).max(12),
+  newPin: z.string().min(4).max(12).regex(/^\d+$/, "digits only"),
 });
 
 export const ollamaPullSchema = z.object({
@@ -309,3 +334,6 @@ export type TerminalRequestInput = z.infer<typeof terminalRequestSchema>;
 export type AgentConfigUpdateInput = z.infer<typeof agentConfigUpdateSchema>;
 export type SkillManifest = z.infer<typeof skillManifestSchema>;
 export type SkillTool = z.infer<typeof skillToolSchema>;
+export type AuthSetupInput = z.infer<typeof authSetupSchema>;
+export type AuthLoginInput = z.infer<typeof authLoginSchema>;
+export type AuthChangePinInput = z.infer<typeof authChangePinSchema>;

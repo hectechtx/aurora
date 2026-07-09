@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { timeAgo } from "@/lib/utils";
+import { describeToolCall } from "@/lib/riskCopy";
 import { SquareTerminal, Play } from "lucide-react";
 
 interface Approval {
@@ -137,6 +138,9 @@ function ApprovalRow({ approval, result, onDecide, pending }: {
             <span className="text-xs text-muted-foreground uppercase font-mono">{detail.mode}</span>
             <span className="text-xs text-muted-foreground">· {timeAgo(approval.createdAt)}</span>
           </div>
+          <p className="text-xs text-muted-foreground/90 mt-1.5 leading-relaxed">
+            {describeToolCall(`run_${detail.mode}`, approval.risk)}
+          </p>
           <pre className="mt-2.5 rounded-md bg-surface border border-border p-2.5 text-xs overflow-x-auto font-mono text-foreground/90">{detail.code}</pre>
           {result && (
             <pre className="mt-2 rounded-md bg-background border border-border p-2.5 text-xs overflow-x-auto font-mono text-muted-foreground whitespace-pre-wrap">

@@ -14,9 +14,9 @@ import { executeCommand, type ExecResult } from "./shell-exec";
 import { runSkillTool } from "./skills/runner";
 import { generateImage } from "./imagegen";
 import type { AgentConfig, SkillTool } from "@shared/schema";
+import { CREATIONS_DIR } from "./paths";
 
 const MAX_STEPS = 6;
-const CREATIONS_DIR = path.resolve(process.cwd(), "data", "creations");
 fs.mkdirSync(CREATIONS_DIR, { recursive: true });
 
 export type RunContext =
@@ -120,9 +120,15 @@ async function skillTools(): Promise<ToolDef[]> {
   return defs;
 }
 
-async function allTools(ctx: RunContext): Promise<ToolDef[]> {
+// When advancedToolsEnabled is off, no risk:"high" tool is even offered to
+// the model — not just gated behind approval. That covers the built-in
+// run_shell/run_node/run_python trio and any skill tool a skill author
+// marked high-risk. Everything else (remember/recall/list_skills/
+// generate_image/save_deliverable, low/medium-risk skill tools) still works.
+async function allTools(ctx: RunContext, advancedToolsEnabled: boolean): Promise<ToolDef[]> {
   const builtins = builtinTools().filter((t) => !t.contexts || t.contexts.includes(ctx.type));
-  return [...builtins, ...(await skillTools())];
+  const all = [...builtins, ...(await skillTools())];
+  return advancedToolsEnabled ? all : all.filter((t) => t.risk !== "high");
 }
 
 function toOllamaTools(tools: ToolDef[]): OllamaToolDef[] {
@@ -275,7 +281,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
     return { status: "final", reply };
   }
 
-  const tools = await allTools(ctx);
+  const tools = await allTools(ctx, config.advancedToolsEnabled);
   let response;
   try {
     response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(tools));
@@ -403,7 +409,7 @@ export async function resumeAfterApproval(approvalId: number, decision: "approve
   if (!decided) throw new Error(`Approval ${approvalId} was already decided`);
 
   const config = await storage.getConfig();
-  const tools = await allTools(ctx);
+  const tools = await allTools(ctx, config.advancedToolsEnabled);
   const tool = tools.find((t) => t.name === detail.call.name);
   const { messages, transcript } = detail;
 

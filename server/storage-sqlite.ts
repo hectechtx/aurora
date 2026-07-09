@@ -12,8 +12,8 @@ import { eq, desc, isNull, and } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import type { Storage } from "./storage-types";
+import { DB_PATH } from "./paths";
 
-const DB_PATH = process.env.AURORA_DB_PATH ?? path.resolve(process.cwd(), "data", "aurora.db");
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const sqlite = new Database(DB_PATH);
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, 
 CREATE TABLE IF NOT EXISTS installed_skills (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT NOT NULL, source_repo TEXT NOT NULL, source_ref TEXT NOT NULL, source_path TEXT NOT NULL, manifest TEXT NOT NULL, tools TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending_review', risk_default TEXT NOT NULL DEFAULT 'medium', installed_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS approvals (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER, action TEXT NOT NULL, detail TEXT NOT NULL, risk TEXT NOT NULL DEFAULT 'high', status TEXT NOT NULL DEFAULT 'pending', target_type TEXT NOT NULL, target_id INTEGER, created_at INTEGER NOT NULL, decided_at INTEGER);
 CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, actor TEXT NOT NULL DEFAULT 'AURORA', action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL DEFAULT 'ok');
-CREATE TABLE IF NOT EXISTS agent_config (id INTEGER PRIMARY KEY AUTOINCREMENT, ollama_host TEXT NOT NULL DEFAULT 'http://localhost:11434', model TEXT NOT NULL DEFAULT '', system_prompt TEXT NOT NULL DEFAULT '', autonomy TEXT NOT NULL DEFAULT 'supervised', image_gen_host TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS agent_config (id INTEGER PRIMARY KEY AUTOINCREMENT, ollama_host TEXT NOT NULL DEFAULT 'http://localhost:11434', model TEXT NOT NULL DEFAULT '', system_prompt TEXT NOT NULL DEFAULT '', autonomy TEXT NOT NULL DEFAULT 'supervised', image_gen_host TEXT NOT NULL DEFAULT '', pin_hash TEXT NOT NULL DEFAULT '', pin_salt TEXT NOT NULL DEFAULT '', advanced_tools_enabled INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER, label TEXT NOT NULL, value TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS creations (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER, agent_id INTEGER, kind TEXT NOT NULL DEFAULT 'image', prompt TEXT NOT NULL, file_path TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, persona TEXT NOT NULL, job_description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', schedule_minutes INTEGER, last_run_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS deliverables (id INTEGER PRIMARY KEY AUTOINCREMENT, a
 for (const stmt of [
   "ALTER TABLE notes ADD COLUMN agent_id INTEGER",
   "ALTER TABLE creations ADD COLUMN agent_id INTEGER",
+  "ALTER TABLE agent_config ADD COLUMN pin_hash TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE agent_config ADD COLUMN pin_salt TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE agent_config ADD COLUMN advanced_tools_enabled INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { sqlite.exec(stmt); } catch { /* column already exists */ }
 }
@@ -175,9 +178,15 @@ export class DatabaseStorage implements Storage {
     return row;
   }
 
-  async updateConfig(patch: Partial<Pick<AgentConfig, "ollamaHost" | "model" | "systemPrompt" | "autonomy" | "imageGenHost">>): Promise<AgentConfig> {
+  async updateConfig(patch: Partial<Pick<AgentConfig, "ollamaHost" | "model" | "systemPrompt" | "autonomy" | "imageGenHost" | "advancedToolsEnabled">>): Promise<AgentConfig> {
     const current = await this.getConfig();
     const [row] = await db.update(agentConfig).set(patch).where(eq(agentConfig.id, current.id)).returning();
+    return row;
+  }
+
+  async setPin(hash: string, salt: string): Promise<AgentConfig> {
+    const current = await this.getConfig();
+    const [row] = await db.update(agentConfig).set({ pinHash: hash, pinSalt: salt }).where(eq(agentConfig.id, current.id)).returning();
     return row;
   }
 

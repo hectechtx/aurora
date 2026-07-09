@@ -7,11 +7,15 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useVoice } from "@/lib/voice";
+import { setToken } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { Volume2 } from "lucide-react";
+import { Volume2, ShieldAlert, LogOut, KeyRound } from "lucide-react";
 
 interface OllamaStatus { live: boolean; host: string; activeModel: string; models: { name: string; size: number }[]; }
-interface AgentConfig { id: number; ollamaHost: string; model: string; systemPrompt: string; autonomy: string; imageGenHost: string; }
+interface AgentConfig {
+  id: number; ollamaHost: string; model: string; systemPrompt: string; autonomy: string;
+  imageGenHost: string; advancedToolsEnabled: boolean;
+}
 interface ImageGenStatus { live: boolean; host: string; }
 
 function LiveDot({ live }: { live: boolean }) {
@@ -36,6 +40,9 @@ export default function Settings() {
   const [pullModelName, setPullModelName] = useState("");
   const [pulling, setPulling] = useState<string | null>(null);
   const [imageGenHost, setImageGenHost] = useState("");
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [pinError, setPinError] = useState("");
 
   useEffect(() => {
     if (config) {
@@ -55,6 +62,32 @@ export default function Settings() {
     },
     onError: (err: Error) => toast({ title: "Couldn't save", description: err.message, variant: "error" }),
   });
+
+  const changePin = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auth/change-pin", { currentPin, newPin }).then((r) => r.json()),
+    onSuccess: () => {
+      setCurrentPin("");
+      setNewPin("");
+      setPinError("");
+      toast({ title: "PIN changed", variant: "success" });
+    },
+    onError: () => setPinError("Couldn't change PIN — check your current PIN and try again."),
+  });
+
+  const logout = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auth/logout"),
+    onSettled: () => {
+      setToken(null);
+      window.location.reload();
+    },
+  });
+
+  function handleChangePin(e: React.FormEvent) {
+    e.preventDefault();
+    setPinError("");
+    if (!/^\d{4,12}$/.test(newPin)) return setPinError("New PIN must be 4-12 digits.");
+    changePin.mutate();
+  }
 
   const pull = useMutation({
     mutationFn: (model: string) => apiRequest("POST", "/api/ollama/pull", { model }).then((r) => r.json()),
@@ -158,6 +191,35 @@ export default function Settings() {
         </div>
       </Card>
 
+      <Card className={cn("p-5 space-y-3 border", config?.advancedToolsEnabled ? "border-risk-high/40" : "border-border")}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium flex items-center gap-1.5">
+            <ShieldAlert size={14} className="text-risk-high" /> Advanced tools
+          </h2>
+          <button
+            onClick={() => updateConfig.mutate({ advancedToolsEnabled: !config?.advancedToolsEnabled })}
+            role="switch"
+            aria-checked={!!config?.advancedToolsEnabled}
+            aria-label={config?.advancedToolsEnabled ? "Disable advanced tools" : "Enable advanced tools"}
+            className={cn(
+              "relative h-5 w-9 rounded-full transition-colors duration-150",
+              config?.advancedToolsEnabled ? "bg-risk-high" : "bg-surface border border-border",
+            )}
+          >
+            <span className={cn("absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-150", config?.advancedToolsEnabled && "translate-x-4")} />
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Controls whether AURORA can run raw shell/Node/Python commands on this computer, or install and run code
+          downloaded from a GitHub repo. Off by default. Only turn this on if you understand that a command or a
+          downloaded skill runs with your full user account's access to this machine — every use still requires
+          your explicit approval, but AURORA (or a skill) can propose genuinely destructive actions.
+        </p>
+        {!config?.advancedToolsEnabled && (
+          <p className="text-xs text-muted-foreground/70">The Terminal page and skill installation are disabled while this is off.</p>
+        )}
+      </Card>
+
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">Image generation</h2>
@@ -214,6 +276,46 @@ export default function Settings() {
         <h2 className="text-sm font-medium">System prompt / persona</h2>
         <Textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={7} />
         <Button variant="outline" onClick={() => updateConfig.mutate({ systemPrompt })}>Save prompt</Button>
+      </Card>
+
+      <Card className="p-5 space-y-4">
+        <h2 className="text-sm font-medium flex items-center gap-1.5">
+          <KeyRound size={14} /> Security
+        </h2>
+        <form onSubmit={handleChangePin} className="space-y-2.5">
+          <label className="text-xs text-muted-foreground">Change PIN</label>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              inputMode="numeric"
+              value={currentPin}
+              onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+              placeholder="Current PIN"
+              maxLength={12}
+              className="flex-1"
+            />
+            <Input
+              type="password"
+              inputMode="numeric"
+              value={newPin}
+              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+              placeholder="New PIN (4-12 digits)"
+              maxLength={12}
+              className="flex-1"
+            />
+            <Button type="submit" variant="outline" disabled={!currentPin || !newPin || changePin.isPending}>
+              Update
+            </Button>
+          </div>
+          {pinError && <p className="text-xs text-risk-high">{pinError}</p>}
+        </form>
+
+        <div className="border-t border-border pt-4 flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">Sign out of this device.</p>
+          <Button variant="outline" onClick={() => logout.mutate()} disabled={logout.isPending}>
+            <LogOut size={14} /> Log out
+          </Button>
+        </div>
       </Card>
     </div>
   );

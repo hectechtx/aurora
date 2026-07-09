@@ -34,7 +34,10 @@ export interface Storage {
   log(action: string, target?: string, outcome?: string, actor?: string): Promise<AuditEntry>;
 
   getConfig(): Promise<AgentConfig>;
-  updateConfig(patch: Partial<Pick<AgentConfig, "ollamaHost" | "model" | "systemPrompt" | "autonomy" | "imageGenHost">>): Promise<AgentConfig>;
+  updateConfig(patch: Partial<Pick<AgentConfig, "ollamaHost" | "model" | "systemPrompt" | "autonomy" | "imageGenHost" | "advancedToolsEnabled">>): Promise<AgentConfig>;
+  // Deliberately separate from updateConfig — the PIN can never be set via
+  // the generic config-patch route, only through the dedicated auth setup flow.
+  setPin(hash: string, salt: string): Promise<AgentConfig>;
 
   createNote(label: string, value: string, agentId?: number | null): Promise<Note>;
   getNotes(labelFilter?: string, limit?: number, agentId?: number | null): Promise<Note[]>;

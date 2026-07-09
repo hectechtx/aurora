@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { cn, timeAgo } from "@/lib/utils";
+import { describeApproval } from "@/lib/riskCopy";
 import { ShieldCheck } from "lucide-react";
 
 interface Approval {
@@ -98,6 +99,10 @@ function ApprovalCard({ approval, onDecide, pending, emphasize }: { approval: Ap
             {detail.context?.type === "agent" ? ` · agent #${detail.context.agentId}` : approval.taskId ? ` · task #${approval.taskId}` : ""}
             {" · "}{timeAgo(approval.createdAt)}
           </div>
+
+          <p className="text-xs text-muted-foreground/90 mt-1.5 leading-relaxed max-w-xl">
+            {describeApproval(approval.targetType, approval.action, approval.risk)}
+          </p>
 
           {approval.targetType === "tool_call" && detail.call && (
             <pre className="mt-2.5 rounded-md bg-surface border border-border p-2.5 text-xs overflow-x-auto max-w-xl font-mono text-muted-foreground">

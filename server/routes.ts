@@ -1,7 +1,6 @@
 import express from "express";
 import type { Express, Request, Response } from "express";
 import type { Server } from "node:http";
-import path from "node:path";
 import { getStorage } from "./storage";
 import { runAgentTurn, runAgentTick, resumeAfterApproval } from "./agent-loop";
 import { installSkillFromGitHub, InstallError } from "./skills/installer";
@@ -9,13 +8,14 @@ import { activateSkill, rejectSkillInstall, disableSkill, enableSkill, deleteSki
 import { health, listModels, pullModel, getPullStatus } from "./ollama";
 import { health as imageGenHealth } from "./imagegen";
 import { executeCommand } from "./shell-exec";
+import { hashPin, verifyPin, createSession, destroySession, requireAuth, tokenFromRequest, isValidSession } from "./auth";
 import {
   taskCreateSchema, taskUpdateSchema, chatSendSchema, skillInstallSchema, approvalDecisionSchema,
   agentConfigUpdateSchema, ollamaPullSchema, terminalRequestSchema,
   agentCreateSchema, agentUpdateSchema, agentQueueItemCreateSchema, deliverableUpdateSchema,
+  authSetupSchema, authLoginSchema, authChangePinSchema,
 } from "@shared/schema";
-
-const CREATIONS_DIR = path.resolve(process.cwd(), "data", "creations");
+import { CREATIONS_DIR } from "./paths";
 
 /** Parses a route :id param, writing a 400 and returning null if it isn't a real integer — a malformed/non-numeric id would otherwise flow into a Drizzle query as NaN. */
 function parseId(req: Request, res: Response): number | null {
@@ -30,7 +30,56 @@ function parseId(req: Request, res: Response): number | null {
 export async function registerRoutes(_httpServer: Server, app: Express): Promise<void> {
   const storage = getStorage;
 
-  app.use("/creations", express.static(CREATIONS_DIR));
+  // ---- Auth — must be registered before the requireAuth gate below, since
+  // these are the only routes reachable without a session. ----
+  app.get("/api/auth/status", async (req, res) => {
+    const config = await storage().getConfig();
+    res.json({ pinSet: !!config.pinHash, authenticated: config.pinHash ? isValidSession(tokenFromRequest(req)) : false });
+  });
+
+  app.post("/api/auth/setup", async (req, res) => {
+    const config = await storage().getConfig();
+    if (config.pinHash) return res.status(400).json({ message: "A PIN is already set." });
+    const parsed = authSetupSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "PIN must be 4-12 digits." });
+    const { hash, salt } = hashPin(parsed.data.pin);
+    await storage().setPin(hash, salt);
+    await storage().log("PIN set (first-run setup)", "", "ok", "owner");
+    res.json({ token: createSession() });
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    const config = await storage().getConfig();
+    if (!config.pinHash) return res.status(428).json({ message: "No PIN set yet — complete first-run setup first.", pinSet: false });
+    const parsed = authLoginSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid PIN." });
+    if (!verifyPin(parsed.data.pin, config.pinHash, config.pinSalt)) {
+      return res.status(401).json({ message: "Incorrect PIN." });
+    }
+    res.json({ token: createSession() });
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    destroySession(tokenFromRequest(req));
+    res.json({ ok: true });
+  });
+
+  // Everything below this line requires a valid session.
+  app.use("/api", requireAuth);
+  app.use("/creations", requireAuth, express.static(CREATIONS_DIR));
+
+  app.post("/api/auth/change-pin", async (req, res) => {
+    const parsed = authChangePinSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid PIN." });
+    const config = await storage().getConfig();
+    if (!verifyPin(parsed.data.currentPin, config.pinHash, config.pinSalt)) {
+      return res.status(401).json({ message: "Current PIN is incorrect." });
+    }
+    const { hash, salt } = hashPin(parsed.data.newPin);
+    await storage().setPin(hash, salt);
+    await storage().log("PIN changed", "", "ok", "owner");
+    res.json({ ok: true });
+  });
 
   // ---- Tasks (each is its own conversation thread) ----
   app.get("/api/tasks", async (_req, res) => {
@@ -85,6 +134,8 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
   });
 
   app.post("/api/skills/install", async (req, res) => {
+    const config = await storage().getConfig();
+    if (!config.advancedToolsEnabled) return res.status(403).json({ message: "Advanced tools are off — enable them in Settings before installing skills from GitHub." });
     const parsed = skillInstallSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input." });
     try {
@@ -110,6 +161,8 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
   app.post("/api/skills/:id/enable", async (req, res) => {
     const id = parseId(req, res);
     if (id === null) return;
+    const config = await storage().getConfig();
+    if (!config.advancedToolsEnabled) return res.status(403).json({ message: "Advanced tools are off — enable them in Settings before enabling skills." });
     try {
       await enableSkill(id);
       res.json(await storage().getSkill(id));
@@ -158,6 +211,13 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
           await storage().log("terminal request denied", approval.action, "denied", "owner");
           return res.json({ approval: await storage().getApproval(id) });
         }
+        // Advanced tools may have been switched off after this was
+        // requested but before it was approved — re-check at execution time.
+        const config = await storage().getConfig();
+        if (!config.advancedToolsEnabled) {
+          await storage().log("terminal request blocked (advanced tools off)", approval.action, "error", "owner");
+          return res.status(403).json({ message: "Advanced tools were turned off after this was requested — enable them in Settings to run it." });
+        }
         const { mode, code } = JSON.parse(approval.detail) as { mode: "shell" | "node" | "python"; code: string };
         const result = await executeCommand(mode, code);
         await storage().log(`ran terminal command (${mode})`, code.slice(0, 200), result.exitCode === 0 ? "ok" : "error", "owner");
@@ -173,6 +233,8 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
 
   // ---- Terminal (manually composed, still approval-gated) ----
   app.post("/api/terminal/request", async (req, res) => {
+    const config = await storage().getConfig();
+    if (!config.advancedToolsEnabled) return res.status(403).json({ message: "Advanced tools are off — enable them in Settings to use the Terminal." });
     const parsed = terminalRequestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request." });
     const { mode, code } = parsed.data;

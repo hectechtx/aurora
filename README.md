@@ -36,9 +36,18 @@ Bound to `127.0.0.1` only, by design — nothing else on your network can reach 
 
 Unlike a Task (a conversation you drive turn by turn), an Agent is a standing worker: give it a name, a persona/voice, and a job description, and it ticks through its own suggestion queue on its own — either on a schedule (every 15 min, hourly, daily, etc.) or only when you click "Run now." Each agent has its own perpetual memory, completely separate from a Task's shared memory and from every other agent's — ask one agent something and a different agent won't know it, exactly like two different employees.
 
-Every tool an agent uses goes through the exact same risk gating as a Task: low-risk tools (`remember`, `recall`, `save_deliverable`) auto-run under Supervised autonomy; anything high-risk (`run_shell`, `run_node`, `run_python`) always waits in Approvals first, regardless of how the agent is scheduled. A paused agent (or one with an empty queue) simply does nothing on its scheduled ticks — the background scheduler checks every agent once a minute and only acts on the ones that are due with something to do.
+Every tool an agent uses goes through the exact same risk gating as a Task: low-risk tools (`remember`, `recall`, `save_deliverable`, `web_search`, `web_fetch`) auto-run under Supervised autonomy; anything high-risk (`run_shell`, `run_node`, `run_python`) always waits in Approvals first, regardless of how the agent is scheduled. A paused agent (or one with an empty queue) simply does nothing on its scheduled ticks — the background scheduler checks every agent once a minute and only acts on the ones that are due with something to do.
 
 The included example is a YouTube-persona agent: give it a comedic/chill persona and a job description like "come up with video ideas, write scripts/titles/descriptions/tags, and generate a thumbnail concept, then save each as a deliverable." It produces real scripts and metadata via the LLM and (if you've set up Image generation) a thumbnail — video generation itself isn't possible with free/local tools yet, and actual publishing to any platform requires that platform's own API credentials, which only you can provide, so agents hand off finished work to the Outbox instead of posting it themselves.
+
+## Web access
+
+Both Tasks and Agents can search and read the live web via two built-in tools, no API key required:
+
+- `web_search` — queries DuckDuckGo's lite endpoint and returns titles/URLs/snippets.
+- `web_fetch` — fetches a URL and returns its readable text (HTML stripped, truncated to ~8,000 characters). Guards against SSRF: every hop, including redirects, is checked against loopback/private/link-local IP ranges before the request is made, so a tool call can't be used to probe services on your own machine or LAN.
+
+Both are classified low-risk (auto-run under Supervised autonomy, same as `remember`/`recall`) since they're read-only outbound requests with no side effects on your system. This is what makes an Agent's scheduled/unattended runs actually useful — without it, an agent can only work from what's already in the model's training data or your own memory notes.
 
 ## Voice
 

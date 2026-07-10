@@ -13,6 +13,7 @@ import { chat, type OllamaMessage, type OllamaToolDef } from "./ollama";
 import { executeCommand, type ExecResult } from "./shell-exec";
 import { runSkillTool } from "./skills/runner";
 import { generateImage } from "./imagegen";
+import { webSearch, webFetch } from "./web-tools";
 import type { AgentConfig, SkillTool } from "@shared/schema";
 import { CREATIONS_DIR } from "./paths";
 
@@ -63,6 +64,20 @@ function builtinTools(): ToolDef[] {
       name: "list_skills", kind: "builtin", risk: "low",
       description: "List currently enabled skills and what they do.",
       parameters: { type: "object", properties: {} },
+    },
+    {
+      name: "web_search", kind: "builtin", risk: "low",
+      description: "Search the web via DuckDuckGo and get back titles, URLs, and snippets. Use this to find out about anything current or beyond your training data before answering.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" }, maxResults: { type: "number", description: "1-10, default 5" } },
+        required: ["query"],
+      },
+    },
+    {
+      name: "web_fetch", kind: "builtin", risk: "low",
+      description: "Fetch a URL and return its readable text content (HTML stripped down to plain text, truncated if long). Use this to read a specific page, e.g. one found via web_search.",
+      parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
     },
     {
       name: "generate_image", kind: "builtin", risk: "medium",
@@ -198,6 +213,28 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
       case "list_skills": {
         const enabled = (await storage.getSkills()).filter((s) => s.status === "enabled");
         return { ok: true, output: enabled.length ? enabled.map((s) => `${s.name} — ${s.description}`).join("\n") : "no skills enabled" };
+      }
+      case "web_search": {
+        const query = String(args.query ?? "").trim();
+        if (!query) return { ok: false, output: "a search query is required" };
+        const maxResults = Math.min(10, Math.max(1, Number(args.maxResults) || 5));
+        try {
+          const results = await webSearch(query, maxResults);
+          if (!results.length) return { ok: true, output: "no results found" };
+          return { ok: true, output: results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n") };
+        } catch (err) {
+          return { ok: false, output: `search failed: ${err instanceof Error ? err.message : String(err)}` };
+        }
+      }
+      case "web_fetch": {
+        const target = String(args.url ?? "").trim();
+        if (!target) return { ok: false, output: "a url is required" };
+        try {
+          const { url, title, text } = await webFetch(target);
+          return { ok: true, output: `${title}\n${url}\n\n${text || "(no readable text content)"}` };
+        } catch (err) {
+          return { ok: false, output: `fetch failed: ${err instanceof Error ? err.message : String(err)}` };
+        }
       }
       case "generate_image": {
         const prompt = String(args.prompt ?? "");

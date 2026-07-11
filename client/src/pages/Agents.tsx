@@ -10,14 +10,17 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { AuroraAvatar, UserAvatar, IdentityAvatar } from "@/components/ui/Avatar";
 import { cn, timeAgo } from "@/lib/utils";
-import { Bot, Plus, Play, Pause, Trash2, Send } from "lucide-react";
+import { Bot, Plus, Play, Pause, Trash2, Send, CornerDownRight } from "lucide-react";
 
 interface AgentItem {
   id: number; name: string; persona: string; jobDescription: string; status: string;
   scheduleMinutes: number | null; lastRunAt: number | null; createdAt: number; updatedAt: number;
 }
 interface AgentLogEntry { id: number; role: string; content: string; toolCalls: string | null; createdAt: number; }
-interface QueueItem { id: number; content: string; status: string; createdAt: number; doneAt: number | null; }
+interface QueueItem {
+  id: number; content: string; status: string; createdAt: number; doneAt: number | null;
+  sourceAgentName: string | null;
+}
 interface ToolCallRecord { name: string; args: Record<string, unknown>; risk: string; status: string; result: string; }
 
 const SCHEDULE_OPTIONS = [
@@ -302,7 +305,14 @@ function QueueList({ agentId }: { agentId: number }) {
     <div className="space-y-2">
       {queue.map((q) => (
         <Card key={q.id} className="p-3 flex items-start justify-between gap-3">
-          <p className="text-sm">{q.content}</p>
+          <div className="min-w-0">
+            {q.sourceAgentName && (
+              <div className="flex items-center gap-1 text-xs text-accent mb-1">
+                <CornerDownRight size={12} /> handed off from {q.sourceAgentName}
+              </div>
+            )}
+            <p className="text-sm">{q.content}</p>
+          </div>
           <div className="flex items-center gap-2 shrink-0">
             <StatusBadge status={q.status} />
             <span className="text-xs text-muted-foreground">{timeAgo(q.createdAt)}</span>

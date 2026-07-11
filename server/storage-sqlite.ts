@@ -8,7 +8,7 @@ import type {
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, desc, isNull, and } from "drizzle-orm";
+import { eq, desc, isNull, and, inArray } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import type { Storage } from "./storage-types";
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id
 CREATE TABLE IF NOT EXISTS creations (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER, agent_id INTEGER, kind TEXT NOT NULL DEFAULT 'image', prompt TEXT NOT NULL, file_path TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, persona TEXT NOT NULL, job_description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', schedule_minutes INTEGER, last_run_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_log_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, tool_calls TEXT, created_at INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS agent_queue_items (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, done_at INTEGER);
+CREATE TABLE IF NOT EXISTS agent_queue_items (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, done_at INTEGER, source_agent_id INTEGER, handoff_depth INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS deliverables (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '[]', body TEXT NOT NULL DEFAULT '', creation_id INTEGER, status TEXT NOT NULL DEFAULT 'ready', created_at INTEGER NOT NULL);
 `);
 
@@ -43,6 +43,8 @@ for (const stmt of [
   "ALTER TABLE agent_config ADD COLUMN pin_hash TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE agent_config ADD COLUMN pin_salt TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE agent_config ADD COLUMN advanced_tools_enabled INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE agent_queue_items ADD COLUMN source_agent_id INTEGER",
+  "ALTER TABLE agent_queue_items ADD COLUMN handoff_depth INTEGER NOT NULL DEFAULT 0",
 ]) {
   try { sqlite.exec(stmt); } catch { /* column already exists */ }
 }
@@ -267,8 +269,13 @@ export class DatabaseStorage implements Storage {
     return row;
   }
 
-  async getAgentQueue(agentId: number): Promise<AgentQueueItem[]> {
-    return db.select().from(agentQueueItems).where(eq(agentQueueItems.agentId, agentId)).orderBy(desc(agentQueueItems.id));
+  async getAgentQueue(agentId: number): Promise<(AgentQueueItem & { sourceAgentName: string | null })[]> {
+    const items = await db.select().from(agentQueueItems).where(eq(agentQueueItems.agentId, agentId)).orderBy(desc(agentQueueItems.id));
+    const sourceIds = [...new Set(items.map((i) => i.sourceAgentId).filter((id): id is number => id != null))];
+    if (sourceIds.length === 0) return items.map((i) => ({ ...i, sourceAgentName: null }));
+    const sources = await db.select().from(agents).where(inArray(agents.id, sourceIds));
+    const nameById = new Map(sources.map((a) => [a.id, a.name]));
+    return items.map((i) => ({ ...i, sourceAgentName: i.sourceAgentId != null ? nameById.get(i.sourceAgentId) ?? null : null }));
   }
 
   // Atomically claims (selects + flips to "in_progress" in one statement) the
@@ -295,11 +302,16 @@ export class DatabaseStorage implements Storage {
       status: row.status as string,
       createdAt: row.created_at as number,
       doneAt: row.done_at as number | null,
+      sourceAgentId: row.source_agent_id as number | null,
+      handoffDepth: row.handoff_depth as number,
     };
   }
 
-  async createQueueItem(agentId: number, content: string): Promise<AgentQueueItem> {
-    const [row] = await db.insert(agentQueueItems).values({ agentId, content, status: "pending", createdAt: Date.now() }).returning();
+  async createQueueItem(agentId: number, content: string, opts?: { sourceAgentId?: number; handoffDepth?: number }): Promise<AgentQueueItem> {
+    const [row] = await db.insert(agentQueueItems).values({
+      agentId, content, status: "pending", createdAt: Date.now(),
+      sourceAgentId: opts?.sourceAgentId, handoffDepth: opts?.handoffDepth ?? 0,
+    }).returning();
     return row;
   }
 

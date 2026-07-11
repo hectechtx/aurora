@@ -256,6 +256,11 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
   app.post("/api/agents", async (req, res) => {
     const parsed = agentCreateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid agent." });
+    // Names are the only handle handoff_to_agent has to pick a target by —
+    // two agents sharing a name would make that resolution ambiguous (and,
+    // since getAgents() is ordered by updatedAt, unstable over time).
+    const nameTaken = (await storage().getAgents()).some((a) => a.name.toLowerCase() === parsed.data.name.toLowerCase());
+    if (nameTaken) return res.status(400).json({ message: `An agent named "${parsed.data.name}" already exists — names need to be unique.` });
     const agent = await storage().createAgent({
       name: parsed.data.name, persona: parsed.data.persona, jobDescription: parsed.data.jobDescription,
       scheduleMinutes: parsed.data.scheduleMinutes ?? null,
@@ -277,6 +282,10 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
     if (id === null) return;
     const parsed = agentUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid update." });
+    if (parsed.data.name) {
+      const nameTaken = (await storage().getAgents()).some((a) => a.id !== id && a.name.toLowerCase() === parsed.data.name!.toLowerCase());
+      if (nameTaken) return res.status(400).json({ message: `An agent named "${parsed.data.name}" already exists — names need to be unique.` });
+    }
     const agent = await storage().updateAgent(id, parsed.data);
     if (!agent) return res.status(404).json({ message: "Agent not found." });
     res.json(agent);

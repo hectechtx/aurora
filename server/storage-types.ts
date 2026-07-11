@@ -56,10 +56,11 @@ export interface Storage {
   getAgentLog(agentId: number, limit?: number): Promise<AgentLogEntry[]>;
   createAgentLogEntry(agentId: number, role: string, content: string, toolCalls?: string | null): Promise<AgentLogEntry>;
 
-  getAgentQueue(agentId: number): Promise<AgentQueueItem[]>;
+  /** Includes sourceAgentName (resolved server-side) for items created via a handoff, so the client can show "handed off from X" without a second round trip. */
+  getAgentQueue(agentId: number): Promise<(AgentQueueItem & { sourceAgentName: string | null })[]>;
   /** Atomically selects and marks "in_progress" the oldest pending queue item for this agent, so two overlapping ticks of the same agent can't both claim it. */
   claimNextPendingQueueItem(agentId: number): Promise<AgentQueueItem | undefined>;
-  createQueueItem(agentId: number, content: string): Promise<AgentQueueItem>;
+  createQueueItem(agentId: number, content: string, opts?: { sourceAgentId?: number; handoffDepth?: number }): Promise<AgentQueueItem>;
   updateQueueItem(id: number, patch: Partial<Pick<AgentQueueItem, "status" | "doneAt">>): Promise<AgentQueueItem | undefined>;
 
   getDeliverables(agentId?: number): Promise<Deliverable[]>;

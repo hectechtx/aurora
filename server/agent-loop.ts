@@ -14,15 +14,32 @@ import { executeCommand, type ExecResult } from "./shell-exec";
 import { runSkillTool } from "./skills/runner";
 import { generateImage } from "./imagegen";
 import { webSearch, webFetch } from "./web-tools";
-import type { AgentConfig, SkillTool } from "@shared/schema";
+import type { Agent, AgentConfig, SkillTool } from "@shared/schema";
 import { CREATIONS_DIR } from "./paths";
 
 const MAX_STEPS = 6;
+// Hard ceiling on how many hops a handoff_to_agent chain can reach (A -> B ->
+// C -> ...) — makes a ping-pong loop between two agents structurally
+// impossible to run away, rather than just unlikely. Depth is tracked on the
+// queue item itself (see shared/schema.ts), not just counted in-memory,
+// since each hop is a separate scheduled/nudged tick, not a recursive call.
+const MAX_HANDOFF_DEPTH = 4;
 fs.mkdirSync(CREATIONS_DIR, { recursive: true });
 
 export type RunContext =
   | { type: "task"; taskId: number }
-  | { type: "agent"; agentId: number; queueItemId: number };
+  | { type: "agent"; agentId: number; queueItemId: number; handoffDepth: number };
+
+// runAgentTick has three independent entry points that can all target the
+// same agent around the same moment — the scheduler's own due-check, a
+// manual "Run now", and a handoff nudge — and nothing about claiming a queue
+// item stops two ticks of the SAME agent from running concurrently. Without
+// this, two overlapping ticks both read/append the same 40-row agent log
+// window and both write lastRunAt, corrupting the conversation history the
+// model sees and racing on the timestamp. A tick is short-lived (one LLM
+// turn), so a simple in-process "who's currently ticking" set is enough —
+// no need for a DB-level lock.
+const agentTicksInFlight = new Set<number>();
 
 export interface ToolCallRecord {
   name: string;
@@ -135,14 +152,44 @@ async function skillTools(): Promise<ToolDef[]> {
   return defs;
 }
 
+// handoff_to_agent only makes sense for a persistent agent (a Task has no
+// name/identity of its own to hand work off from), and only if there's
+// somebody else to hand off to — so it's built dynamically per-turn with a
+// concrete enum of current agent names, instead of living in the static
+// builtinTools() list. This also means the model can't hallucinate a target
+// that doesn't exist; the enum is exactly who's actually available right now.
+async function getOtherAgents(selfId: number): Promise<Agent[]> {
+  return (await getStorage().getAgents()).filter((a) => a.id !== selfId);
+}
+
+async function handoffTool(ctx: RunContext): Promise<ToolDef[]> {
+  if (ctx.type !== "agent") return [];
+  const others = await getOtherAgents(ctx.agentId);
+  if (others.length === 0) return [];
+  return [{
+    name: "handoff_to_agent", kind: "builtin", risk: "low", contexts: ["agent"],
+    description: "Hand a piece of work off to one of the owner's other agents by adding it to their queue, with a note explaining what you need and any context/findings they'll need. Use this to delegate work outside your own job — e.g. a researcher agent handing findings to a writer agent. They'll work it on their own schedule, or right away if they're due.",
+    parameters: {
+      type: "object",
+      properties: {
+        target: { type: "string", description: "Exact name of the agent to hand off to", enum: others.map((a) => a.name) },
+        note: { type: "string", description: "What you need them to do, with the context/findings they'll need to do it" },
+      },
+      required: ["target", "note"],
+    },
+  }];
+}
+
 // When advancedToolsEnabled is off, no risk:"high" tool is even offered to
 // the model — not just gated behind approval. That covers the built-in
 // run_shell/run_node/run_python trio and any skill tool a skill author
 // marked high-risk. Everything else (remember/recall/list_skills/
-// generate_image/save_deliverable, low/medium-risk skill tools) still works.
+// generate_image/save_deliverable/web_search/web_fetch/handoff_to_agent,
+// low/medium-risk skill tools) still works.
 async function allTools(ctx: RunContext, advancedToolsEnabled: boolean): Promise<ToolDef[]> {
   const builtins = builtinTools().filter((t) => !t.contexts || t.contexts.includes(ctx.type));
-  const all = [...builtins, ...(await skillTools())];
+  const [skills, handoff] = await Promise.all([skillTools(), handoffTool(ctx)]);
+  const all = [...builtins, ...skills, ...handoff];
   return advancedToolsEnabled ? all : all.filter((t) => t.risk !== "high");
 }
 
@@ -187,7 +234,7 @@ async function finalizeContext(ctx: RunContext, status: TurnResult["status"]): P
   }
 }
 
-async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: RunContext, config: AgentConfig): Promise<{ ok: boolean; output: string }> {
+async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: RunContext, config: AgentConfig, transcript: ToolCallRecord[]): Promise<{ ok: boolean; output: string }> {
   const storage = getStorage();
   const memoryAgentId = ctx.type === "agent" ? ctx.agentId : null;
   try {
@@ -278,6 +325,53 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
 
         const deliverable = await storage.createDeliverable({ agentId: ctx.agentId, title, description, tags: JSON.stringify(tags), body, creationId });
         return { ok: true, output: `Saved deliverable #${deliverable.id} ("${title}") to the Outbox for your review.` };
+      }
+      case "handoff_to_agent": {
+        if (ctx.type !== "agent") return { ok: false, output: "handoff_to_agent is only available to persistent agents." };
+
+        // MAX_HANDOFF_DEPTH only bounds chain *length* (A -> B -> C -> ...).
+        // Without also bounding *fan-out*, one turn could call this tool
+        // several times to different targets, each hop then doing the same —
+        // an exponential blow-up in unattended agent activity from a single
+        // trigger, not just a linear ping-pong. Capping it to one successful
+        // handoff per turn keeps the whole tree a strict chain, which is what
+        // the depth cap actually assumes it's bounding.
+        if (transcript.some((t) => t.name === "handoff_to_agent" && t.status === "ok")) {
+          return { ok: false, output: "already handed off once this turn — only one handoff per turn is allowed, to keep chains linear instead of branching out." };
+        }
+
+        const targetName = String(args.target ?? "").trim();
+        const note = String(args.note ?? "").trim();
+        if (!targetName || !note) return { ok: false, output: "both target and note are required" };
+
+        const [self, others] = await Promise.all([storage.getAgent(ctx.agentId), getOtherAgents(ctx.agentId)]);
+        const target = others.find((a) => a.name.toLowerCase() === targetName.toLowerCase());
+        if (!target) {
+          const names = others.map((a) => a.name).join(", ") || "(no other agents exist)";
+          return { ok: false, output: `no agent named "${targetName}" found. Other agents: ${names}` };
+        }
+
+        const nextDepth = ctx.handoffDepth + 1;
+        if (nextDepth > MAX_HANDOFF_DEPTH) {
+          return { ok: false, output: `handoff chain limit reached (max ${MAX_HANDOFF_DEPTH} hops) — refusing to hand off further so this can't turn into a loop between agents.` };
+        }
+
+        const content = `[Handed off by ${self?.name ?? "another agent"}]: ${note}`;
+        await storage.createQueueItem(target.id, content, { sourceAgentId: ctx.agentId, handoffDepth: nextDepth });
+        await storage.log(`handoff: ${self?.name ?? "agent"} -> ${target.name}`, note.slice(0, 200));
+
+        // Nudge the receiving agent to work its queue now instead of waiting
+        // for its own schedule — fire-and-forget so this turn doesn't block
+        // on theirs. runAgentTick's own in-flight guard means this is safe
+        // even if the target is already ticking for an unrelated reason (its
+        // own schedule, a manual "Run now", or a second concurrent handoff);
+        // it just skips rather than racing. It works whatever's oldest in
+        // their queue, same as any other tick — this one just doesn't wait.
+        runAgentTick(target.id).catch((err) => {
+          storage.log(`handoff nudge failed: ${target.name}`, err instanceof Error ? err.message : String(err), "error").catch(() => {});
+        });
+
+        return { ok: true, output: `Handed off to "${target.name}" and nudged them to start now.` };
       }
       case "run_shell": {
         const r = await executeCommand("shell", String(args.command ?? ""));
@@ -373,7 +467,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
       return { status: "awaiting_approval", reply, approvalId: approval.id };
     }
 
-    const { ok, output } = await executeTool(tool, args, ctx, config);
+    const { ok, output } = await executeTool(tool, args, ctx, config, transcript);
     messages.push({ role: "tool", content: output });
     transcript.push({ name, args, risk: tool.risk, status: ok ? "ok" : "error", result: output });
     await storage.log(`ran tool: ${name}`, summarizeArgs(args), ok ? "ok" : "error");
@@ -406,27 +500,33 @@ export async function runAgentTurn(taskId: number, userMessage: string): Promise
 
 /** One tick of a persistent agent: pulls its next pending queue item (if any) and works it through the same loop a task uses. */
 export async function runAgentTick(agentId: number): Promise<TurnResult | { skipped: string }> {
-  const storage = getStorage();
-  const agent = await storage.getAgent(agentId);
-  if (!agent) throw new Error(`Agent ${agentId} not found`);
-  if (agent.status !== "active") return { skipped: "agent is paused" };
+  if (agentTicksInFlight.has(agentId)) return { skipped: "agent is already mid-tick" };
+  agentTicksInFlight.add(agentId);
+  try {
+    const storage = getStorage();
+    const agent = await storage.getAgent(agentId);
+    if (!agent) throw new Error(`Agent ${agentId} not found`);
+    if (agent.status !== "active") return { skipped: "agent is paused" };
 
-  const config = await storage.getConfig();
-  if (!config.model) return { skipped: "no Ollama model configured" };
+    const config = await storage.getConfig();
+    if (!config.model) return { skipped: "no Ollama model configured" };
 
-  const item = await storage.claimNextPendingQueueItem(agentId);
-  if (!item) return { skipped: "queue is empty" };
+    const item = await storage.claimNextPendingQueueItem(agentId);
+    if (!item) return { skipped: "queue is empty" };
 
-  await storage.updateAgent(agentId, { lastRunAt: Date.now() });
-  await storage.createAgentLogEntry(agentId, "user", item.content);
-  await storage.log(`agent tick: ${agent.name}`, item.content.slice(0, 200));
+    await storage.updateAgent(agentId, { lastRunAt: Date.now() });
+    await storage.createAgentLogEntry(agentId, "user", item.content);
+    await storage.log(`agent tick: ${agent.name}`, item.content.slice(0, 200));
 
-  const ctx: RunContext = { type: "agent", agentId, queueItemId: item.id };
-  const systemPrompt = `${agent.persona}\n\nYour job: ${agent.jobDescription}`;
-  const messages = await buildBaseMessages(ctx, systemPrompt);
-  const result = await runLoop(ctx, messages, config, [], 0);
-  await finalizeContext(ctx, result.status);
-  return result;
+    const ctx: RunContext = { type: "agent", agentId, queueItemId: item.id, handoffDepth: item.handoffDepth };
+    const systemPrompt = `${agent.persona}\n\nYour job: ${agent.jobDescription}`;
+    const messages = await buildBaseMessages(ctx, systemPrompt);
+    const result = await runLoop(ctx, messages, config, [], 0);
+    await finalizeContext(ctx, result.status);
+    return result;
+  } finally {
+    agentTicksInFlight.delete(agentId);
+  }
 }
 
 /** Resumes a tool_call approval (from a task or an agent) — executes or records the denial of the pending call, then re-enters the loop so the model can react to the result. */
@@ -460,7 +560,7 @@ export async function resumeAfterApproval(approvalId: number, decision: "approve
     messages.push({ role: "tool", content: output });
     transcript.push({ name: detail.call.name, args: detail.call.args, risk: approval.risk as ToolCallRecord["risk"], status: "error", result: output });
   } else {
-    const { ok, output } = await executeTool(tool, detail.call.args, ctx, config);
+    const { ok, output } = await executeTool(tool, detail.call.args, ctx, config, transcript);
     messages.push({ role: "tool", content: output });
     transcript.push({ name: detail.call.name, args: detail.call.args, risk: approval.risk as ToolCallRecord["risk"], status: ok ? "ok" : "error", result: output });
     await storage.log(`approved + ran tool: ${detail.call.name}`, summarizeArgs(detail.call.args), ok ? "ok" : "error", "owner");

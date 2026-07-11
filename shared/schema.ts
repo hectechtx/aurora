@@ -143,6 +143,13 @@ export const agentQueueItems = sqliteTable("agent_queue_items", {
   status: text("status").notNull().default("pending"), // pending | in_progress | awaiting_approval | done | error
   createdAt: integer("created_at").notNull(),
   doneAt: integer("done_at"),
+  // Set when another agent created this item via its handoff_to_agent tool
+  // (null = came from the owner, via the queue box on the Agents page).
+  sourceAgentId: integer("source_agent_id"),
+  // How many handoff hops produced this item (0 = owner-created or a
+  // top-level item). handoff_to_agent refuses to create depth > 4, so a
+  // ping-pong loop between agents can't run away indefinitely.
+  handoffDepth: integer("handoff_depth").notNull().default(0),
 });
 
 // A finished, ready-to-post content package an agent produced via its

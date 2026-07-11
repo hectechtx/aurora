@@ -16,6 +16,8 @@ Bound to `127.0.0.1` only, by design — nothing else on your network can reach 
 
 ## How it works
 
+AURORA opens on **Agents**, not chat — the app is built around a roster of standing workers you talk *to* via a queue, not a single assistant you talk *at*. Chat still exists (see Tasks below), it's just no longer the front door.
+
 - **Tasks** — every conversation with the vessel is its own task/thread with its own history, so you can run several unrelated things side by side without them sharing context. Tool calls made (or wanted) show up inline under each reply. Persistent memory (see below) is the one thing shared *across* tasks.
 - **Library** — generated images land here (see Image generation below).
 - **Memory** — the notes AURORA has saved about you via its `remember`/`recall` tools, shared across every task. Search or delete them directly.
@@ -52,6 +54,15 @@ Agents can delegate work to each other via `handoff_to_agent` — a researcher a
 An agent can't hand off to itself, and an unknown/misspelled target name gets a clear error listing who's actually available, rather than silently failing.
 
 `handoff_to_agent` is classified low-risk (auto-runs under Supervised autonomy, like `remember`/`web_search`) rather than requiring approval on every hop — deliberately, so a chain can actually run unattended. The real safety boundary is downstream: the Outbox already requires your manual review before anything a chain of agents produces goes anywhere external, regardless of how many hops of research/writing happened before it landed there. If a hop tries something genuinely dangerous (`run_shell` and friends), that's still independently high-risk and still waits in Approvals no matter which agent — or which chain — it came from.
+
+## Notifications
+
+Agents work unattended, so it's easy to miss what they did until you happen to check the Outbox or Approvals. Turn on **Desktop notifications** in Settings to get a native OS notification when:
+
+- An agent finishes something and saves a deliverable to the Outbox.
+- An agent (not you) triggers something that needs your approval.
+
+Off by default, and gated by your browser/OS's own notification permission — turning the setting on requests that permission, and the toggle stays disabled if it's blocked. Uses the standard Web Notification API directly, so it works the same whether you're running AURORA in a browser tab or the packaged Electron app, with no extra plumbing either way. The first poll after you enable it only establishes a baseline (so you don't get flooded with notifications for a backlog) — only things that show up afterward fire one.
 
 ## Web access
 

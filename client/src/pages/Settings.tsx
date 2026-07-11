@@ -5,11 +5,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
+import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { useVoice } from "@/lib/voice";
+import { useNotifications } from "@/lib/notifications";
 import { setToken } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { Volume2, ShieldAlert, LogOut, KeyRound } from "lucide-react";
+import { Volume2, ShieldAlert, LogOut, KeyRound, BellRing } from "lucide-react";
 
 interface OllamaStatus { live: boolean; host: string; activeModel: string; models: { name: string; size: number }[]; }
 interface AgentConfig {
@@ -31,6 +33,7 @@ export default function Settings() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const voice = useVoice();
+  const notifications = useNotifications();
   const { data: config } = useQuery<AgentConfig>({ queryKey: ["/api/config"] });
   const { data: status } = useQuery<OllamaStatus>({ queryKey: ["/api/ollama/status"], refetchInterval: 8000 });
   const { data: imageGenStatus } = useQuery<ImageGenStatus>({ queryKey: ["/api/imagegen/status"], refetchInterval: 8000 });
@@ -196,18 +199,12 @@ export default function Settings() {
           <h2 className="text-sm font-medium flex items-center gap-1.5">
             <ShieldAlert size={14} className="text-risk-high" /> Advanced tools
           </h2>
-          <button
-            onClick={() => updateConfig.mutate({ advancedToolsEnabled: !config?.advancedToolsEnabled })}
-            role="switch"
-            aria-checked={!!config?.advancedToolsEnabled}
-            aria-label={config?.advancedToolsEnabled ? "Disable advanced tools" : "Enable advanced tools"}
-            className={cn(
-              "relative h-5 w-9 rounded-full transition-colors duration-150",
-              config?.advancedToolsEnabled ? "bg-risk-high" : "bg-surface border border-border",
-            )}
-          >
-            <span className={cn("absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-150", config?.advancedToolsEnabled && "translate-x-4")} />
-          </button>
+          <Switch
+            tone="danger"
+            checked={!!config?.advancedToolsEnabled}
+            onCheckedChange={() => updateConfig.mutate({ advancedToolsEnabled: !config?.advancedToolsEnabled })}
+            label={config?.advancedToolsEnabled ? "Disable advanced tools" : "Enable advanced tools"}
+          />
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed">
           Controls whether AURORA can run raw shell/Node/Python commands on this computer, or install and run code
@@ -237,18 +234,11 @@ export default function Settings() {
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">Voice</h2>
-          <button
-            onClick={() => voice.setEnabled(!voice.enabled)}
-            role="switch"
-            aria-checked={voice.enabled}
-            aria-label={voice.enabled ? "Disable voice replies" : "Enable voice replies"}
-            className={cn(
-              "relative h-5 w-9 rounded-full transition-colors duration-150",
-              voice.enabled ? "bg-primary" : "bg-surface border border-border",
-            )}
-          >
-            <span className={cn("absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-150", voice.enabled && "translate-x-4")} />
-          </button>
+          <Switch
+            checked={voice.enabled}
+            onCheckedChange={() => voice.setEnabled(!voice.enabled)}
+            label={voice.enabled ? "Disable voice replies" : "Enable voice replies"}
+          />
         </div>
         {!voice.supported ? (
           <p className="text-xs text-muted-foreground">Your browser doesn't support speech synthesis.</p>
@@ -269,6 +259,35 @@ export default function Settings() {
               </Button>
             </div>
           </>
+        )}
+      </Card>
+
+      <Card className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium flex items-center gap-1.5">
+            <BellRing size={14} /> Desktop notifications
+          </h2>
+          <Switch
+            // Shown as off when permission has been revoked at the OS/browser
+            // level, even if the setting is still "on" from before that
+            // happened — a switch that visually reads as active but can never
+            // actually fire is more confusing than one that reads as off.
+            checked={notifications.enabled && notifications.permission !== "denied"}
+            onCheckedChange={() => notifications.setEnabled(!notifications.enabled)}
+            disabled={!notifications.supported || notifications.permission === "denied"}
+            label={notifications.enabled ? "Disable desktop notifications" : "Enable desktop notifications"}
+          />
+        </div>
+        {!notifications.supported ? (
+          <p className="text-xs text-muted-foreground">Your browser doesn't support desktop notifications.</p>
+        ) : notifications.permission === "denied" ? (
+          <p className="text-xs text-muted-foreground">
+            Notifications are blocked at the browser/OS level — check your notification settings for AURORA to re-enable, then flip this on.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Get a native notification when an agent finishes a deliverable or hits something that needs your approval — so unattended work stays visible even when AURORA isn't the window you're looking at.
+          </p>
         )}
       </Card>
 

@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { ToastProvider } from "@/components/ui/Toast";
 import { VoiceProvider } from "@/lib/voice";
+import { NotificationsProvider } from "@/lib/notifications";
 import { AuthGate } from "@/components/AuthGate";
 import { OllamaOnboarding } from "@/components/OllamaOnboarding";
 import { AppShell } from "@/components/AppShell";
@@ -25,21 +26,23 @@ export default function App() {
         <AuthGate>
           <OllamaOnboarding>
             <VoiceProvider>
-              <AppShell>
-                <Switch>
-                  <Route path="/" component={Tasks} />
-                  <Route path="/library" component={Library} />
-                  <Route path="/memory" component={Memory} />
-                  <Route path="/terminal" component={Terminal} />
-                  <Route path="/agents" component={Agents} />
-                  <Route path="/outbox" component={Outbox} />
-                  <Route path="/skills" component={Skills} />
-                  <Route path="/approvals" component={Approvals} />
-                  <Route path="/audit" component={Audit} />
-                  <Route path="/settings" component={Settings} />
-                  <Route component={NotFound} />
-                </Switch>
-              </AppShell>
+              <NotificationsProvider>
+                <AppShell>
+                  <Switch>
+                    <Route path="/" component={Agents} />
+                    <Route path="/tasks" component={Tasks} />
+                    <Route path="/library" component={Library} />
+                    <Route path="/memory" component={Memory} />
+                    <Route path="/terminal" component={Terminal} />
+                    <Route path="/outbox" component={Outbox} />
+                    <Route path="/skills" component={Skills} />
+                    <Route path="/approvals" component={Approvals} />
+                    <Route path="/audit" component={Audit} />
+                    <Route path="/settings" component={Settings} />
+                    <Route component={NotFound} />
+                  </Switch>
+                </AppShell>
+              </NotificationsProvider>
             </VoiceProvider>
           </OllamaOnboarding>
         </AuthGate>

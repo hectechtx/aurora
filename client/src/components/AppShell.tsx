@@ -8,19 +8,19 @@ import { useQuery } from "@tanstack/react-query";
 
 const NAV_GROUPS = [
   {
-    label: "Workspace",
+    label: "Agents",
     items: [
-      { href: "/", label: "Tasks", icon: ListTodo },
-      { href: "/library", label: "Library", icon: Image },
-      { href: "/memory", label: "Memory", icon: BrainCircuit },
-      { href: "/terminal", label: "Terminal", icon: SquareTerminal },
+      { href: "/", label: "Agents", icon: Bot },
+      { href: "/outbox", label: "Outbox", icon: Inbox },
     ],
   },
   {
-    label: "Agents",
+    label: "Workspace",
     items: [
-      { href: "/agents", label: "Agents", icon: Bot },
-      { href: "/outbox", label: "Outbox", icon: Inbox },
+      { href: "/tasks", label: "Tasks", icon: ListTodo },
+      { href: "/library", label: "Library", icon: Image },
+      { href: "/memory", label: "Memory", icon: BrainCircuit },
+      { href: "/terminal", label: "Terminal", icon: SquareTerminal },
     ],
   },
   {
@@ -56,7 +56,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     refetchInterval: 10_000,
   });
   const { data: approvals } = useQuery<{ status: string }[]>({ queryKey: ["/api/approvals"], refetchInterval: 5_000 });
+  const { data: deliverables } = useQuery<{ status: string }[]>({ queryKey: ["/api/deliverables"], refetchInterval: 5_000 });
   const pendingCount = approvals?.filter((a) => a.status === "pending").length ?? 0;
+  const readyCount = deliverables?.filter((d) => d.status === "ready").length ?? 0;
+  // A persistent, always-on nav signal for "work is waiting" — independent of
+  // desktop notifications, which need an OS permission grant and can be
+  // missed or dismissed. This is always visible just by looking at the sidebar.
+  const navBadgeCounts: Record<string, number> = { Approvals: pendingCount, Outbox: readyCount };
 
   return (
     <div className="flex min-h-screen">
@@ -78,6 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="space-y-0.5">
                 {group.items.map(({ href, label, icon: Icon }) => {
                   const active = location === href;
+                  const badgeCount = navBadgeCounts[label] ?? 0;
                   return (
                     <Link
                       key={href}
@@ -92,9 +99,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         <Icon size={16} strokeWidth={2} />
                         {label}
                       </span>
-                      {label === "Approvals" && pendingCount > 0 && (
+                      {badgeCount > 0 && (
                         <span className="rounded-full bg-risk-high/15 text-risk-high text-[10px] font-semibold px-1.5 py-0.5 leading-none min-w-[18px] text-center">
-                          {pendingCount}
+                          {badgeCount}
                         </span>
                       )}
                     </Link>

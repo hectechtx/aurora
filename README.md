@@ -4,6 +4,8 @@ A local, Ollama-brained autonomous vessel: perceive (chat + history) → prompt 
 
 Architecture pattern borrowed from the `evo-jarvis-src` project (Express + Vite + React + Drizzle/SQLite, audit log, human-approval gate) but scoped to a single-user, local-only app — Ollama only ever runs on your own machine, so there's no hosted/multi-user mode here.
 
+Prebuilt Windows installer: see [Releases](https://github.com/hectechtx/aurora/releases). Unsigned, so SmartScreen will warn on first run — "More info" → "Run anyway".
+
 ## Run it
 
 1. Install [Ollama](https://ollama.com) and start it: `ollama serve`

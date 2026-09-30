@@ -1,0 +1,34 @@
+{
+  "name": "Logo Clear Space Calculator",
+  "version": "1.0.0",
+  "description": "Computes recommended clear-space and minimum-size guidelines for a logo based on its dimensions.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_logo_clear_space",
+      "description": "Computes recommended clear-space padding and minimum display size for a logo given its pixel dimensions.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "logoWidthPx": {
+            "type": "number"
+          },
+          "logoHeightPx": {
+            "type": "number"
+          },
+          "clearSpaceRatio": {
+            "type": "number",
+            "description": "Fraction of the smaller logo dimension to use as clear space. Default 0.25."
+          }
+        },
+        "required": [
+          "logoWidthPx",
+          "logoHeightPx"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

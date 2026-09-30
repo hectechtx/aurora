@@ -1,0 +1,26 @@
+{
+  "name": "Consistency Checker",
+  "version": "1.0.0",
+  "description": "Flags inconsistent spelling variants (e.g. American vs British spelling, hyphenation) used within the same document.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "check_consistency",
+      "description": "Checks text for mixed use of American/British or other common spelling variant pairs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

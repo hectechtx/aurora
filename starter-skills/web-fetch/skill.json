@@ -1,0 +1,23 @@
+{
+  "name": "Web Fetch",
+  "version": "1.0.0",
+  "description": "Fetches a web page and returns its readable text content (HTML stripped), plus the page title. Gives an agent the ability to actually read a URL the owner or another agent points it at.",
+  "entrypoint": "index.js",
+  "risk": "medium",
+  "tools": [
+    {
+      "name": "web_fetch",
+      "description": "Fetch a URL over HTTP(S) and return the page title and its main readable text with HTML tags, scripts, and styles removed. Use when you need to read the actual content of a specific web page.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "The full http(s) URL to fetch." },
+          "max_chars": { "type": "number", "description": "Optional cap on returned text length (default 8000)." }
+        },
+        "required": ["url"]
+      },
+      "risk": "medium"
+    }
+  ],
+  "category": "Research & Web"
+}

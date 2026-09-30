@@ -1,0 +1,45 @@
+{
+  "name": "Elevator Pitch Builder",
+  "version": "1.0.0",
+  "description": "Fills a proven elevator-pitch template (problem/solution/market/differentiator/ask) from your inputs.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "build_pitch",
+      "description": "Builds an elevator pitch from product, problem, target market, solution, differentiator, and an optional ask.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "targetMarket": {
+            "type": "string"
+          },
+          "solution": {
+            "type": "string"
+          },
+          "differentiator": {
+            "type": "string"
+          },
+          "ask": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "product",
+          "problem",
+          "targetMarket",
+          "solution",
+          "differentiator"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

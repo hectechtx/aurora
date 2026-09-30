@@ -1,0 +1,47 @@
+{
+  "name": "Shot List Formatter",
+  "version": "1.0.0",
+  "description": "Formats a raw list of shots into a structured, numbered shot list.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_shot_list",
+      "description": "Formats shots into a numbered markdown shot list table.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "shots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "scene": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "shotType": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "scene",
+                "description"
+              ]
+            }
+          }
+        },
+        "required": [
+          "shots"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

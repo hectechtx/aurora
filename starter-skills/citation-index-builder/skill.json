@@ -1,0 +1,45 @@
+{
+  "name": "Citation Index Builder",
+  "version": "1.0.0",
+  "description": "Builds an alphabetized citation/reference index from a list of sources.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "build_citation_index",
+      "description": "Sorts sources alphabetically by author surname and formats each as a numbered citation entry.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "author": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "year": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "author",
+                "title",
+                "year"
+              ]
+            }
+          }
+        },
+        "required": [
+          "sources"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Legal & Compliance"
+}

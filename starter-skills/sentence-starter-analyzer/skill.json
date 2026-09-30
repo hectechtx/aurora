@@ -1,0 +1,26 @@
+{
+  "name": "Sentence Starter Analyzer",
+  "version": "1.0.0",
+  "description": "Flags consecutive sentences that start with the same word — a common monotony issue.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "analyze_sentence_starters",
+      "description": "Finds runs of consecutive sentences that begin with the same word.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

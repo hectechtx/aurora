@@ -1,0 +1,25 @@
+{
+  "name": "Favicon Checklist Generator",
+  "version": "1.0.0",
+  "description": "Given a base source image size, lists all standard favicon/app-icon sizes you should export.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_favicon_checklist",
+      "description": "Lists standard favicon and app-icon export sizes that fit within a given source image size.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sourceSizePx": {
+            "type": "number",
+            "description": "Size of the source square image in px. Default 1024."
+          }
+        },
+        "required": []
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

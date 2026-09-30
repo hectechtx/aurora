@@ -1,0 +1,46 @@
+{
+  "name": "Date Calculator",
+  "version": "1.0.0",
+  "description": "Calculates days between two dates, adds/subtracts days from a date, and finds the day of the week — useful for planning and scheduling.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_date",
+      "description": "Date math. operation \"days_between\" needs from/to (YYYY-MM-DD). \"add_days\" needs date and days (can be negative). \"day_of_week\" needs date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "days_between",
+              "add_days",
+              "day_of_week"
+            ]
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "from": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "to": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "days": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

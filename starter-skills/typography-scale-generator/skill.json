@@ -1,0 +1,32 @@
+{
+  "name": "Typography Scale Generator",
+  "version": "1.0.0",
+  "description": "Generates a font-size type scale from a base size and a named or numeric ratio (e.g. Major Third, Perfect Fourth).",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_type_scale",
+      "description": "Generates a type scale of font sizes (px and rem) from a base size, a numeric or named ratio, and a step count.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "baseSizePx": {
+            "type": "number",
+            "description": "Base font size in px. Default 16."
+          },
+          "ratio": {
+            "description": "Numeric ratio, or a named ratio: minorSecond, majorSecond, minorThird, majorThird, perfectFourth, goldenRatio. Default 1.25."
+          },
+          "steps": {
+            "type": "number",
+            "description": "Number of steps in the scale. Default 6."
+          }
+        },
+        "required": []
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

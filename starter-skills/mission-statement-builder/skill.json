@@ -1,0 +1,34 @@
+{
+  "name": "Mission Statement Builder",
+  "version": "1.0.0",
+  "description": "Structures a mission statement from your purpose, target audience, and value proposition.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "build_mission_statement",
+      "description": "Builds a mission statement from purpose, audience, and value proposition.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "audience",
+          "value"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

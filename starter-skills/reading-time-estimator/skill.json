@@ -1,0 +1,29 @@
+{
+  "name": "Reading Time Estimator",
+  "version": "1.0.0",
+  "description": "Estimates reading time for a text at a given words-per-minute pace.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "estimate_reading_time",
+      "description": "Estimates how long a text takes to read given a words-per-minute reading speed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "wpm": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

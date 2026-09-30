@@ -1,0 +1,37 @@
+{
+  "name": "Color Palette Generator",
+  "version": "1.0.0",
+  "description": "Generates a color palette (complementary, analogous, triadic, or monochromatic) from a base hex color.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_palette",
+      "description": "Generates a color palette from a base hex color (e.g. \"#3366cc\") using a color scheme.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "hex": {
+            "type": "string",
+            "description": "Base color, e.g. #3366cc"
+          },
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "complementary",
+              "analogous",
+              "triadic",
+              "monochromatic"
+            ]
+          }
+        },
+        "required": [
+          "hex",
+          "scheme"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

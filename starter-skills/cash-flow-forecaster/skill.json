@@ -1,0 +1,37 @@
+{
+  "name": "Cash Flow Forecaster",
+  "version": "1.0.0",
+  "description": "Projects monthly cash balance forward from a starting balance and recurring in/outflows.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "forecast_cash_flow",
+      "description": "Projects monthly cash balance forward from a starting balance and recurring in/outflows.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "startingBalance": {
+            "type": "number"
+          },
+          "monthlyInflow": {
+            "type": "number"
+          },
+          "monthlyOutflow": {
+            "type": "number"
+          },
+          "months": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "startingBalance",
+          "monthlyInflow",
+          "monthlyOutflow"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

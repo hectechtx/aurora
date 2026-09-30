@@ -1,0 +1,78 @@
+{
+  "name": "Call Sheet Generator",
+  "version": "1.0.0",
+  "description": "Formats crew, cast, and schedule details into a standard production call sheet.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_call_sheet",
+      "description": "Generates a formatted plain-text production call sheet from crew, location, and schedule details.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "projectName": {
+            "type": "string"
+          },
+          "shootDate": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "generalCallTime": {
+            "type": "string"
+          },
+          "crew": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "callTime": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role",
+                "name"
+              ]
+            }
+          },
+          "schedule": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "type": "string"
+                },
+                "item": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "time",
+                "item"
+              ]
+            }
+          }
+        },
+        "required": [
+          "projectName",
+          "shootDate",
+          "location",
+          "generalCallTime",
+          "crew"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

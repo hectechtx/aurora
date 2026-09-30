@@ -90,7 +90,7 @@ function isPrivateOrLoopback(ip: string): boolean {
   return false;
 }
 
-async function assertPublicHost(hostname: string): Promise<void> {
+export async function assertPublicHost(hostname: string): Promise<void> {
   if (hostname === "localhost") throw new Error("refuses to fetch localhost or private/internal addresses");
   const addrs = net.isIP(hostname) ? [hostname] : (await dns.lookup(hostname, { all: true })).map((a) => a.address);
   for (const addr of addrs) {
@@ -156,6 +156,57 @@ export async function webFetch(targetUrl: string, maxRedirects = 5): Promise<Fet
     const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? decodeEntities(stripTags(titleMatch[1])) : current.hostname;
     return { url: current.toString(), title, text: htmlToText(raw).slice(0, MAX_TEXT_CHARS) };
+  }
+
+  throw new Error("too many redirects");
+}
+
+export interface ImageFetchResult {
+  bytes: Buffer;
+  contentType: string;
+}
+
+const MAX_IMAGE_BYTES = 12_000_000; // generous headroom over a real photo
+
+/** Same SSRF guard and per-hop re-check as webFetch, but returns raw bytes for see_image instead of parsed text. */
+export async function fetchImageBytes(targetUrl: string, maxRedirects = 5): Promise<ImageFetchResult> {
+  let current: URL;
+  try {
+    current = new URL(targetUrl);
+  } catch {
+    throw new Error("invalid URL");
+  }
+  if (current.protocol !== "http:" && current.protocol !== "https:") {
+    throw new Error("only http/https URLs are supported");
+  }
+
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    await assertPublicHost(current.hostname);
+
+    const res = await fetch(current.toString(), {
+      headers: { "User-Agent": USER_AGENT },
+      redirect: "manual",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+
+    if ([301, 302, 303, 307, 308].includes(res.status)) {
+      const location = res.headers.get("location");
+      if (!location) throw new Error(`redirect (${res.status}) had no location header`);
+      current = new URL(location, current);
+      continue;
+    }
+
+    if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
+
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.startsWith("image/")) throw new Error(`not an image (content-type: ${contentType || "unknown"})`);
+
+    const contentLength = Number(res.headers.get("content-length") ?? "0");
+    if (contentLength > MAX_IMAGE_BYTES) throw new Error("image too large");
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > MAX_IMAGE_BYTES) throw new Error("image too large");
+
+    return { bytes: Buffer.from(buf), contentType };
   }
 
   throw new Error("too many redirects");

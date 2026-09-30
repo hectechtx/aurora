@@ -1,0 +1,50 @@
+{
+  "name": "SWOT Analysis Formatter",
+  "version": "1.0.0",
+  "description": "Structures raw strengths/weaknesses/opportunities/threats bullet points into a formatted SWOT grid.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_swot",
+      "description": "Formats strengths, weaknesses, opportunities, and threats lists into a markdown SWOT grid.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "strengths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "weaknesses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "opportunities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "threats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "strengths",
+          "weaknesses",
+          "opportunities",
+          "threats"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

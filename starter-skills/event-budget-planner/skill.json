@@ -1,0 +1,29 @@
+{
+  "name": "Event Budget Planner",
+  "version": "1.0.0",
+  "description": "Allocates a total event budget across standard categories using typical percentage guidelines (or custom ones you provide).",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "plan_event_budget",
+      "description": "Allocates a total event budget across categories by percentage.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "totalBudget": {
+            "type": "number"
+          },
+          "categories": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "totalBudget"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

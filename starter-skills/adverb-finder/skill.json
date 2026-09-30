@@ -1,0 +1,26 @@
+{
+  "name": "Adverb Finder",
+  "version": "1.0.0",
+  "description": "Flags -ly adverbs in text, a common self-editing target for tightening prose.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "find_adverbs",
+      "description": "Finds -ly adverbs in the given text and counts their occurrences.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

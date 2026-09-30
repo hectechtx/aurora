@@ -1,0 +1,26 @@
+{
+  "name": "Text Metadata Extractor",
+  "version": "1.0.0",
+  "description": "Extracts basic cataloging metadata (word/char count, line/paragraph count) from a text blob.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "extract_text_metadata",
+      "description": "Computes word count, character count, line count, paragraph count, and average word length for a block of text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

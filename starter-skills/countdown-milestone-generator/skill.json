@@ -1,0 +1,29 @@
+{
+  "name": "Countdown Milestone Generator",
+  "version": "1.0.0",
+  "description": "Generates milestone dates counting back from a deadline, evenly spaced.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_milestones",
+      "description": "Generates evenly spaced milestone dates counting back from a deadline.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "deadline": {
+            "type": "string"
+          },
+          "milestoneCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "deadline"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

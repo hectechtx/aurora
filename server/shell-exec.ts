@@ -25,14 +25,15 @@ function truncate(s: string): string {
   return s.length > MAX_OUTPUT_CHARS ? s.slice(0, MAX_OUTPUT_CHARS) + "\n… (output truncated)" : s;
 }
 
-function runProcess(cmd: string, args: string[], options: { shell?: boolean; cwd?: string } = {}): Promise<ExecResult> {
+function runProcess(cmd: string, args: string[], options: { shell?: boolean; cwd?: string; env?: NodeJS.ProcessEnv; onStart?: (kill: () => void) => void } = {}): Promise<ExecResult> {
   const start = Date.now();
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
 
-    const child = spawn(cmd, args, { shell: options.shell ?? false, cwd: options.cwd });
+    const child = spawn(cmd, args, { shell: options.shell ?? false, cwd: options.cwd, env: options.env });
+    options.onStart?.(() => { timedOut = true; child.kill("SIGKILL"); });
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -60,18 +61,24 @@ function runProcess(cmd: string, args: string[], options: { shell?: boolean; cwd
  * "node"/"python" write the code to a temp file and run it with the
  * matching interpreter, so multi-line scripts with imports work normally.
  */
-export async function executeCommand(mode: ExecMode, code: string): Promise<ExecResult> {
+export async function executeCommand(mode: ExecMode, code: string, onStart?: (kill: () => void) => void): Promise<ExecResult> {
   if (mode === "shell") {
-    return runProcess(code, [], { shell: true });
+    return runProcess(code, [], { shell: true, onStart });
   }
 
   const ext = mode === "node" ? ".js" : ".py";
   const interpreter = mode === "node" ? process.execPath : (process.platform === "win32" ? "python" : "python3");
+  // In dev, process.execPath is a real node binary. In the packaged Electron
+  // app, it's AURORA.exe itself — spawning that directly on a .js file
+  // launches a second Electron GUI instance instead of running the script.
+  // ELECTRON_RUN_AS_NODE tells Electron's binary to behave as plain Node
+  // when spawned as a child process; it's a no-op for a real node.exe.
+  const env = mode === "node" ? { ...process.env, ELECTRON_RUN_AS_NODE: "1" } : process.env;
   const dir = mkdtempSync(path.join(tmpdir(), "aurora-exec-"));
   const file = path.join(dir, `snippet${ext}`);
   try {
     writeFileSync(file, code, "utf-8");
-    return await runProcess(interpreter, [file]);
+    return await runProcess(interpreter, [file], { env, onStart });
   } finally {
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
   }

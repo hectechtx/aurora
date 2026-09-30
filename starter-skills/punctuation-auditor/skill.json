@@ -1,0 +1,26 @@
+{
+  "name": "Punctuation Auditor",
+  "version": "1.0.0",
+  "description": "Counts usage of em dashes, exclamation points, ellipses, and semicolons to flag possible overuse.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "audit_punctuation",
+      "description": "Counts em dashes, exclamation points, ellipses, and semicolons in text and flags overuse per 1000 words.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

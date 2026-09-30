@@ -1,0 +1,29 @@
+{
+  "name": "Word Frequency Analyzer",
+  "version": "1.0.0",
+  "description": "Counts word frequency in a text and flags the most overused words, excluding common stopwords.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "analyze_word_frequency",
+      "description": "Analyzes word frequency in a text, excluding stopwords, and returns the top N most frequent words.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "topN": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

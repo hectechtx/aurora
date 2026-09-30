@@ -1,0 +1,23 @@
+{
+  "name": "RSS / Feed Reader",
+  "version": "1.0.0",
+  "description": "Fetches an RSS or Atom feed and returns the latest items (title, link, date, summary). Lets an agent track a news site, blog, subreddit, or YouTube channel feed for fresh material.",
+  "entrypoint": "index.js",
+  "risk": "medium",
+  "tools": [
+    {
+      "name": "read_feed",
+      "description": "Fetch an RSS or Atom feed URL and return its latest entries. Great for monitoring trends/news sources. Reddit (add .rss to a subreddit URL) and YouTube channel feeds work too.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "The RSS/Atom feed URL." },
+          "limit": { "type": "number", "description": "Max entries to return (default 10, max 30)." }
+        },
+        "required": ["url"]
+      },
+      "risk": "medium"
+    }
+  ],
+  "category": "Research & Web"
+}

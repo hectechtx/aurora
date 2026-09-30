@@ -1,0 +1,37 @@
+{
+  "name": "Engagement Rate Calculator",
+  "version": "1.0.0",
+  "description": "Computes engagement rate from likes, comments, shares, and follower/view count.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_engagement_rate",
+      "description": "Computes engagement rate percentage from likes, comments, shares, and a follower or view count.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "likes": {
+            "type": "number"
+          },
+          "comments": {
+            "type": "number"
+          },
+          "shares": {
+            "type": "number"
+          },
+          "followersOrViews": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "likes",
+          "comments",
+          "followersOrViews"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

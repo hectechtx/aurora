@@ -1,0 +1,33 @@
+{
+  "name": "ROI Calculator",
+  "version": "1.0.0",
+  "description": "Computes return on investment and, optionally, payback period from an initial investment and total return over a number of periods.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_roi",
+      "description": "Computes ROI percent and optional payback period from investment and total return.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "investment": {
+            "type": "number"
+          },
+          "totalReturn": {
+            "type": "number"
+          },
+          "periods": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "investment",
+          "totalReturn"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

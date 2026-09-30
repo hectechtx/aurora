@@ -1,0 +1,26 @@
+{
+  "name": "Sentence Length Analyzer",
+  "version": "1.0.0",
+  "description": "Reports sentence length distribution (word counts per sentence) to help gauge pacing and variety.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "analyze_sentence_length",
+      "description": "Computes sentence word-count statistics (min, max, average, variety score) for a text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Contract Clause Flagger",
+  "version": "1.0.0",
+  "description": "Scans contract text for common risk-related clause keywords (indemnification, liquidated damages, non-compete, etc.) and locates them. A keyword screening aid only — NOT legal advice.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "flag_contract_clauses",
+      "description": "Searches contract text for a built-in list of risk-related clause keywords and returns each match with a surrounding snippet and character index.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Legal & Compliance"
+}

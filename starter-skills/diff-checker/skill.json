@@ -1,0 +1,30 @@
+{
+  "name": "Diff Checker",
+  "version": "1.0.0",
+  "description": "Computes a line-based diff between two text blobs, showing added/removed/unchanged lines.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "diff_text",
+      "description": "Computes a line-based diff between two text blobs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

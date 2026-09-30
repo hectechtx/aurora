@@ -1,0 +1,46 @@
+{
+  "name": "Citation Formatter",
+  "version": "1.0.0",
+  "description": "Formats a source's author/title/year/publisher into an APA, MLA, or Chicago-style citation string.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_citation",
+      "description": "Builds a single-author-book citation string in APA, MLA, or Chicago style.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "style": {
+            "type": "string",
+            "enum": [
+              "apa",
+              "mla",
+              "chicago"
+            ]
+          },
+          "author": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "year": {
+            "type": "string"
+          },
+          "publisher": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "style",
+          "author",
+          "title",
+          "year"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

@@ -1,0 +1,29 @@
+{
+  "name": "CMYK Gamut Warning",
+  "version": "1.0.0",
+  "description": "Flags RGB/hex colors that are likely out of typical CMYK print gamut, using a heuristic saturation/brightness check — approximate, not a substitute for a real color-managed proof.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "check_cmyk_gamut",
+      "description": "Heuristically flags hex colors that are likely to print poorly (very vivid/neon colors outside typical CMYK gamut).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "hexColors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "hexColors"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

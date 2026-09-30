@@ -1,0 +1,41 @@
+{
+  "name": "Episode Runtime Calculator",
+  "version": "1.0.0",
+  "description": "Sums segment durations into a total episode/video runtime with formatted output and per-segment cumulative start times.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_episode_runtime",
+      "description": "Sums segment durations and computes cumulative start times for each segment.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "durationSeconds": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "durationSeconds"
+              ]
+            }
+          }
+        },
+        "required": [
+          "segments"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

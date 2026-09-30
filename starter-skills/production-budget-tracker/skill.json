@@ -1,0 +1,45 @@
+{
+  "name": "Production Budget Tracker",
+  "version": "1.0.0",
+  "description": "Tracks production budget line items against actual spend and flags overages.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "track_production_budget",
+      "description": "Compares budgeted vs. spent amounts per line item and flags overages.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "string"
+                },
+                "budgeted": {
+                  "type": "number"
+                },
+                "spent": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "category",
+                "budgeted",
+                "spent"
+              ]
+            }
+          }
+        },
+        "required": [
+          "lines"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

@@ -1,0 +1,36 @@
+{
+  "name": "Caption Length Checker",
+  "version": "1.0.0",
+  "description": "Checks a caption's character count against platform limits and flags/truncates if over.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "check_caption_length",
+      "description": "Checks whether a caption is within a given platform's character limit and provides a truncated preview if not.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "instagram",
+              "x",
+              "tiktok",
+              "youtube"
+            ]
+          }
+        },
+        "required": [
+          "caption",
+          "platform"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

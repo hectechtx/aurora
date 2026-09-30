@@ -1,0 +1,26 @@
+{
+  "name": "SQL Formatter",
+  "version": "1.0.0",
+  "description": "Pretty-prints a raw SQL string by placing major keywords on new lines, indenting, and uppercasing them.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_sql",
+      "description": "Reformats a raw SQL string with keywords on new lines and uppercased.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sql"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

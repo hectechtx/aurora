@@ -9,3 +9,10 @@ data/skills/
 data/skills-staging/
 .env
 *.tsbuildinfo
+# Runtime data (models, media, DB) and local one-off artifacts
+userdata/
+data/
+db-backups-*/
+*.reg
+/main.js
+C*UsersgrimrAppData*

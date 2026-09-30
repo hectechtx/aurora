@@ -1,0 +1,34 @@
+{
+  "name": "Break-Even Calculator",
+  "version": "1.0.0",
+  "description": "Computes break-even units and revenue from fixed costs, price per unit, and variable cost per unit.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_break_even",
+      "description": "Calculates the break-even point in units and revenue given fixed costs, price per unit, and variable cost per unit.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fixedCosts": {
+            "type": "number"
+          },
+          "pricePerUnit": {
+            "type": "number"
+          },
+          "variableCostPerUnit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "fixedCosts",
+          "pricePerUnit",
+          "variableCostPerUnit"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

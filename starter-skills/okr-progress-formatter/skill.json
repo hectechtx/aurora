@@ -1,0 +1,60 @@
+{
+  "name": "OKR Progress Formatter",
+  "version": "1.0.0",
+  "description": "Formats a list of objectives and their key results (with current/target values) into a scored progress table.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_okr_progress",
+      "description": "Computes per-key-result progress percentages and per-objective averages, and formats them into a markdown table.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objectives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "objective": {
+                  "type": "string"
+                },
+                "keyResults": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "description": {
+                        "type": "string"
+                      },
+                      "current": {
+                        "type": "number"
+                      },
+                      "target": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "description",
+                      "current",
+                      "target"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "objective",
+                "keyResults"
+              ]
+            }
+          }
+        },
+        "required": [
+          "objectives"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

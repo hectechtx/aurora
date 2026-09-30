@@ -1,0 +1,32 @@
+{
+  "name": "Hashtag Generator",
+  "version": "1.0.0",
+  "description": "Generates a set of relevant hashtags from topic keywords using common combination patterns.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_hashtags",
+      "description": "Generates hashtags from a list of keywords, including common modifier combinations.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "keywords"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

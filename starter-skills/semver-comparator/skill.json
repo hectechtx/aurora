@@ -1,0 +1,30 @@
+{
+  "name": "Semver Comparator",
+  "version": "1.0.0",
+  "description": "Compares two semantic version strings and reports which is greater and the bump type between them.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "compare_semver",
+      "description": "Compares two semantic version strings and reports which is greater and the bump type.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "version1": {
+            "type": "string"
+          },
+          "version2": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version1",
+          "version2"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

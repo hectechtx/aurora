@@ -1,0 +1,42 @@
+{
+  "name": "CSS Gradient Generator",
+  "version": "1.0.0",
+  "description": "Generates CSS linear or radial gradient code from a list of colors and an angle.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_css_gradient",
+      "description": "Builds a CSS linear-gradient or radial-gradient string from a list of colors, an angle, and a gradient type.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "colors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "At least 2 CSS color values."
+          },
+          "angleDeg": {
+            "type": "number",
+            "description": "Angle in degrees for linear gradients. Default 90."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "radial"
+            ],
+            "description": "Gradient type. Default linear."
+          }
+        },
+        "required": [
+          "colors"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

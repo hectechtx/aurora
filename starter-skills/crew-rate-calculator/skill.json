@@ -1,0 +1,49 @@
+{
+  "name": "Crew Rate Calculator",
+  "version": "1.0.0",
+  "description": "Computes total crew cost from day rates, number of shoot days, and headcount per role.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_crew_cost",
+      "description": "Computes total crew cost per role and a grand total from day rates, headcount, and shoot days.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "dayRate": {
+                  "type": "number"
+                },
+                "headcount": {
+                  "type": "number"
+                },
+                "days": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "role",
+                "dayRate",
+                "headcount",
+                "days"
+              ]
+            }
+          }
+        },
+        "required": [
+          "roles"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

@@ -25,8 +25,11 @@ export async function createApp(storage: Storage): Promise<Express> {
   await setStorage(storage);
 
   const app = express();
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: false }));
+  // Default 100kb is fine for everything except pasted/attached images in
+  // Task chat, which arrive as base64 JSON (~33% larger than the raw file) —
+  // 16mb gives headroom over imageUploadSchema's 15MB cap.
+  app.use(express.json({ limit: "16mb" }));
+  app.use(express.urlencoded({ extended: false, limit: "16mb" }));
 
   app.use((req, res, next) => {
     const start = Date.now();

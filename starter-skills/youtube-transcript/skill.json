@@ -1,0 +1,23 @@
+{
+  "name": "YouTube Transcript",
+  "version": "1.0.0",
+  "description": "Fetches the transcript/captions of a YouTube video by URL or ID, returning the full text. Lets a content agent study a video's actual content, summarize it, or repurpose it.",
+  "entrypoint": "index.js",
+  "risk": "medium",
+  "tools": [
+    {
+      "name": "youtube_transcript",
+      "description": "Get the transcript text of a YouTube video from its URL or 11-character video ID. Returns the concatenated caption text. Best-effort: some videos have captions disabled or region-locked.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "video": { "type": "string", "description": "A YouTube watch URL, youtu.be URL, or the 11-char video ID." },
+          "lang": { "type": "string", "description": "Optional preferred caption language code (e.g. 'en'). Falls back to whatever's available." }
+        },
+        "required": ["video"]
+      },
+      "risk": "medium"
+    }
+  ],
+  "category": "Research & Web"
+}

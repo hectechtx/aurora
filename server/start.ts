@@ -2,8 +2,12 @@ import { createServer } from "node:http";
 import { createConnection } from "node:net";
 import { execFile } from "node:child_process";
 import { createApp, log } from "./app";
-import { DatabaseStorage } from "./storage-sqlite";
+import { DatabaseStorage, sqlite } from "./storage-sqlite";
+import { startBackups } from "./backup";
+import { startDataDriveWatch } from "./datadrive";
 import { startScheduler } from "./scheduler";
+import { startComfyUi } from "./comfyui";
+import { startTelegramBot } from "./telegram";
 
 // Best-effort "open this URL in the default browser" — never throws.
 function openBrowser(url: string) {
@@ -42,12 +46,37 @@ export interface StartServerOptions {
 export async function startServer(opts: StartServerOptions = {}): Promise<{ port: number }> {
   const shouldOpenBrowser = opts.openBrowser ?? true;
 
-  const app = await createApp(new DatabaseStorage());
+  const storage = new DatabaseStorage();
+  const app = await createApp(storage);
   const httpServer = createServer(app);
   startScheduler();
+  // Long-poll loop for the Telegram music remote. No-ops until a bot token
+  // AND an owner id are set in Settings, and picks them up without a restart.
+  startTelegramBot(storage);
+  // Fire-and-forget: ComfyUI takes ~30s to become ready and nothing needs it
+  // until the owner asks for an image, so don't make AURORA's own startup wait
+  // on it. Failures are logged and swallowed inside startComfyUi().
+  void startComfyUi();
+  // The data drive is an external enclosure that intermittently drops off the
+  // bus mid-session; these snapshots land on the internal drive so losing it
+  // costs at most half an hour of work. See backup.ts.
+  startBackups(sqlite);
+  startDataDriveWatch();
 
   if (process.env.NODE_ENV !== "production") {
-    const { setupVite } = await import("./vite");
+    // A literal "./vite" specifier here would let esbuild statically resolve
+    // and inline server/vite.ts (and vite.config.ts, and the "vite" package
+    // itself) into the production bundle — and since a single-outfile esbuild
+    // build can't code-split a dynamic import, it hoists that inlined
+    // module's imports into unconditional top-level `import` statements,
+    // which Node then tries to resolve at startup even though this branch
+    // never runs in production. "vite" is a devDependency, so it isn't in a
+    // packaged app's node_modules and that resolution throws. Building the
+    // specifier at runtime keeps esbuild from statically determining the
+    // import target, so it leaves this as a genuine dynamic import instead
+    // of bundling it.
+    const viteModuleSpecifier = "./vite";
+    const { setupVite } = await import(viteModuleSpecifier);
     await setupVite(httpServer, app);
   }
 

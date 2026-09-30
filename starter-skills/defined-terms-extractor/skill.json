@@ -1,0 +1,26 @@
+{
+  "name": "Defined Terms Extractor",
+  "version": "1.0.0",
+  "description": "Extracts capitalized \"Defined Terms\" (shown in quotes) from contract text for a definitions list. An extraction aid only — not legal advice.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "extract_defined_terms",
+      "description": "Finds capitalized phrases wrapped in straight or curly quotes in contract text, dedupes them, and returns an alphabetized list of defined terms.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Legal & Compliance"
+}

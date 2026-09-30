@@ -1,0 +1,29 @@
+{
+  "name": "Board Deck Outline Generator",
+  "version": "1.0.0",
+  "description": "Generates a standard board-meeting deck outline with sections and suggested talking points.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_board_deck_outline",
+      "description": "Generates a standard board-meeting deck outline with sections and suggested talking points.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "companyName": {
+            "type": "string"
+          },
+          "quarter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "companyName"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

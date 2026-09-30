@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Tray, Menu, shell, nativeImage } from "electron";
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,8 +28,23 @@ if (!app.requestSingleInstanceLock()) {
     // writable, place, so point it at Electron's per-user data folder and
     // the app's own bundled resources instead.
     process.env.NODE_ENV = "production";
-    process.env.AURORA_DATA_DIR = path.join(app.getPath("userData"), "data");
+    // Owner keeps all data off the system drive: use the F-drive data folder
+    // (matching scripts/launch.cmd) if it exists, else fall back to Electron's
+    // per-user folder. An explicit AURORA_DATA_DIR env still wins over both.
+    const F_DATA_DIR = "F:\\Claude\\AURORA\\userdata";
+    process.env.AURORA_DATA_DIR =
+      process.env.AURORA_DATA_DIR ??
+      (fs.existsSync(F_DATA_DIR) ? F_DATA_DIR : path.join(app.getPath("userData"), "data"));
+    process.env.HF_HOME = process.env.HF_HOME ?? path.join(process.env.AURORA_DATA_DIR, "hf-cache");
+    // The database stays on the internal drive even when AURORA_DATA_DIR points
+    // at the external one — it's small and irreplaceable, and keeping it local
+    // means the app survives that enclosure detaching. See paths.ts.
+    process.env.AURORA_DB_DIR = process.env.AURORA_DB_DIR ?? path.join(app.getPath("userData"), "data");
     process.env.AURORA_STATIC_DIR = path.resolve(__dirname, "../public");
+    // "starter-skills" ships from the project root (not a build output), so
+    // it's two levels up from dist/electron — one level would land in dist/
+    // and find nothing, the same trap the tray icon path below fell into.
+    process.env.AURORA_STARTER_SKILLS_DIR = path.resolve(__dirname, "../../starter-skills");
 
     // Deliberately a dynamic import, evaluated only now that the env vars
     // above are set — server/paths.ts reads them at module-load time, and a
@@ -44,7 +60,7 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
 
-    const iconPath = path.join(__dirname, "assets", "tray.png");
+    const iconPath = path.resolve(__dirname, "../../electron/assets", "tray.png");
     const appIcon = nativeImage.createFromPath(iconPath);
 
     mainWindow = new BrowserWindow({
@@ -59,6 +75,10 @@ if (!app.requestSingleInstanceLock()) {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        // Powers the in-app Browser page's <webview> tag — a real, isolated
+        // page-browsing surface embedded in the app rather than a second
+        // window, matching the "everything lives inside AURORA" idea.
+        webviewTag: true,
       },
     });
 

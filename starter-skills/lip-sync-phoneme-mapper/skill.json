@@ -1,0 +1,26 @@
+{
+  "name": "Lip Sync Phoneme Mapper",
+  "version": "1.0.0",
+  "description": "Roughly maps words in a phrase to simplified viseme/mouth-shape groups for lip-sync reference — a coarse approximation, not phonetically precise.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "map_phonemes",
+      "description": "Maps each word of a phrase to a simplified sequence of mouth-shape (viseme) groups for rough lip-sync reference.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

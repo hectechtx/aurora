@@ -1,0 +1,26 @@
+{
+  "name": "HTTP Status Lookup",
+  "version": "1.0.0",
+  "description": "Looks up the standard meaning and category of an HTTP status code.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "lookup_http_status",
+      "description": "Looks up the standard meaning and category of an HTTP status code.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

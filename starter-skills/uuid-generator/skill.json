@@ -1,0 +1,24 @@
+{
+  "name": "UUID Generator",
+  "version": "1.0.0",
+  "description": "Generates one or more random v4 UUIDs.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_uuids",
+      "description": "Generates the requested number of random v4 UUIDs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": []
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

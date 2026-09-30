@@ -1,0 +1,45 @@
+{
+  "name": "Stakeholder Map Generator",
+  "version": "1.0.0",
+  "description": "Categorizes stakeholders into a power/interest grid from a rated list.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_stakeholder_map",
+      "description": "Categorizes stakeholders into a power/interest quadrant grid.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "stakeholders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "power": {
+                  "type": "number"
+                },
+                "interest": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "power",
+                "interest"
+              ]
+            }
+          }
+        },
+        "required": [
+          "stakeholders"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

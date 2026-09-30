@@ -1,0 +1,26 @@
+{
+  "name": "NDA Clause Checklist",
+  "version": "1.0.0",
+  "description": "Checks whether standard NDA clause types appear to be present in given contract text. A completeness screening aid only — NOT legal advice on whether the NDA is actually adequate.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "check_nda_checklist",
+      "description": "Scans contract text for keyword sets associated with standard NDA clause types (confidentiality, term, exceptions, remedies, governing law) and reports which appear present.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Legal & Compliance"
+}

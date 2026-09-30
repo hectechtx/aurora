@@ -57,6 +57,17 @@ export default {
       transitionTimingFunction: {
         smooth: "var(--ease)",
       },
+      keyframes: {
+        // Slow drift of a background-gradient's position — used to make
+        // AURORA's overseer orb feel alive when she has no portrait yet.
+        gradient: {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+        },
+      },
+      animation: {
+        gradient: "gradient 6s ease infinite",
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

@@ -1,0 +1,26 @@
+{
+  "name": "Rhyme Finder",
+  "version": "1.0.0",
+  "description": "Finds words from a built-in word list that rhyme with a given word, based on matching word endings.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "find_rhymes",
+      "description": "Finds candidate rhymes for a given word from a built-in list of common English words.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "word": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "word"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

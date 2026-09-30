@@ -1,0 +1,35 @@
+{
+  "name": "Color Blindness Simulator",
+  "version": "1.0.0",
+  "description": "Approximates how a hex color appears under protanopia, deuteranopia, or tritanopia using standard simulation matrices.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "simulate_color_blindness",
+      "description": "Transforms a hex color to approximate how it appears under a given type of color blindness.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "hex": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "protanopia",
+              "deuteranopia",
+              "tritanopia"
+            ]
+          }
+        },
+        "required": [
+          "hex",
+          "type"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

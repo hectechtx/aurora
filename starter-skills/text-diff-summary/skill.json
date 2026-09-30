@@ -1,0 +1,30 @@
+{
+  "name": "Text Diff Summary",
+  "version": "1.0.0",
+  "description": "Summarizes word-level differences between two text versions — additions, deletions, word count change.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "summarize_diff",
+      "description": "Compares two texts word-by-word and reports words added, words removed, and word count deltas.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

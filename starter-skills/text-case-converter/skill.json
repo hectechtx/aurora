@@ -1,0 +1,38 @@
+{
+  "name": "Text Case Converter",
+  "version": "1.0.0",
+  "description": "Converts text between camelCase, snake_case, kebab-case, Title Case, UPPERCASE, and lowercase.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "convert_case",
+      "description": "Converts text to the given case style: camelCase, snake_case, kebab-case, titlecase, uppercase, or lowercase.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "camelCase",
+              "snake_case",
+              "kebab-case",
+              "titlecase",
+              "uppercase",
+              "lowercase"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "style"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

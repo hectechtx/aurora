@@ -1,0 +1,31 @@
+{
+  "name": "Mockup Dimension Presets",
+  "version": "1.0.0",
+  "description": "Returns standard canvas dimensions for common ad, print, and social media mockup formats.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "get_mockup_dimensions",
+      "description": "Returns standard pixel dimensions for common social, print, or ad mockup formats.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "social",
+              "print",
+              "ads",
+              "all"
+            ],
+            "description": "Default all."
+          }
+        },
+        "required": []
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

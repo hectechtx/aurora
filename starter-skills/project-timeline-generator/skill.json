@@ -1,0 +1,45 @@
+{
+  "name": "Project Timeline Generator",
+  "version": "1.0.0",
+  "description": "Builds a sequential project timeline with start/end dates from a list of tasks and durations (assumes tasks run back-to-back, no parallelism).",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_timeline",
+      "description": "Generates a sequential project timeline with start/end dates for each task.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "durationDays": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "durationDays"
+              ]
+            }
+          }
+        },
+        "required": [
+          "startDate",
+          "tasks"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

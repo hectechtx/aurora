@@ -1,0 +1,30 @@
+{
+  "name": "Redline Summary",
+  "version": "1.0.0",
+  "description": "Summarizes word-level differences between two contract text versions for a quick redline overview. A text-comparison aid only — not legal advice on the significance of changes.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "summarize_redline",
+      "description": "Compares original and revised contract text using a bag-of-words diff and reports words added, words removed, and overall word count change.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "originalText": {
+            "type": "string"
+          },
+          "revisedText": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "originalText",
+          "revisedText"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

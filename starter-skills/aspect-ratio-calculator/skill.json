@@ -1,0 +1,38 @@
+{
+  "name": "Aspect Ratio Calculator",
+  "version": "1.0.0",
+  "description": "Computes a missing width or height given the other dimension and a target aspect ratio.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_aspect_ratio",
+      "description": "Computes the missing width or height for a target aspect ratio, and returns the simplified ratio.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "number",
+            "description": "Known width. Provide this or height."
+          },
+          "height": {
+            "type": "number",
+            "description": "Known height. Provide this or width."
+          },
+          "ratioWidth": {
+            "type": "number"
+          },
+          "ratioHeight": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ratioWidth",
+          "ratioHeight"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

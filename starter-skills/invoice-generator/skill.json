@@ -1,0 +1,55 @@
+{
+  "name": "Invoice Generator",
+  "version": "1.0.0",
+  "description": "Formats invoice line items into a totaled, formatted plain-text invoice with tax and discount.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_invoice",
+      "description": "Formats invoice line items into a totaled, formatted plain-text invoice with tax and discount.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clientName": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ]
+            }
+          },
+          "taxPercent": {
+            "type": "number"
+          },
+          "discountPercent": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "clientName",
+          "items"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

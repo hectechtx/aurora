@@ -1,0 +1,33 @@
+{
+  "name": "Best Post Time Estimator",
+  "version": "1.0.0",
+  "description": "Suggests rule-of-thumb best posting time windows for a platform — general industry heuristics, NOT personalized analytics for your specific audience.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "estimate_best_post_time",
+      "description": "Returns generic rule-of-thumb suggested posting time windows for a given social platform.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "instagram",
+              "tiktok",
+              "x",
+              "youtube",
+              "linkedin"
+            ]
+          }
+        },
+        "required": [
+          "platform"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

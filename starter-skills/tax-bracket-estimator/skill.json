@@ -1,0 +1,34 @@
+{
+  "name": "Tax Bracket Estimator",
+  "version": "1.0.0",
+  "description": "Rough illustrative estimate of US federal income tax owed using simplified bracket tables — an illustrative estimate only, not tax advice.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "estimate_tax",
+      "description": "Estimates US federal income tax owed using simplified progressive bracket tables. Illustrative only.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "income": {
+            "type": "number"
+          },
+          "filingStatus": {
+            "type": "string",
+            "enum": [
+              "single",
+              "marriedJoint"
+            ]
+          }
+        },
+        "required": [
+          "income",
+          "filingStatus"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

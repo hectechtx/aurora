@@ -1,0 +1,30 @@
+{
+  "name": "Runway Calculator",
+  "version": "1.0.0",
+  "description": "Computes cash runway in months from current cash balance and monthly burn rate.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_runway",
+      "description": "Computes cash runway in months from current cash balance and monthly burn rate.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cashBalance": {
+            "type": "number"
+          },
+          "monthlyBurn": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "cashBalance",
+          "monthlyBurn"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

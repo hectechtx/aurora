@@ -1,5 +1,6 @@
 import { User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AuthedImage } from "./AuthedImage";
 
 export function AuroraAvatar({ className }: { className?: string }) {
   return (
@@ -28,8 +29,17 @@ function hueForName(name: string): number {
   return IDENTITY_HUES[hash % IDENTITY_HUES.length];
 }
 
-/** Deterministic colored initial avatar for a task/agent name — same name always gets the same color, so items are easy to tell apart at a glance in a list. */
-export function IdentityAvatar({ name, className }: { name: string; className?: string }) {
+/** Deterministic colored initial avatar for a task/agent name — same name always gets the same color, so items are easy to tell apart at a glance in a list. When `avatarPath` is set (a generated character portrait, see Agents.tsx), renders that image instead. */
+export function IdentityAvatar({ name, avatarPath, className }: { name: string; avatarPath?: string | null; className?: string }) {
+  if (avatarPath) {
+    return (
+      <AuthedImage
+        src={`/creations/${avatarPath}`}
+        alt={name}
+        className={cn("shrink-0 rounded-full object-cover bg-surface", className)}
+      />
+    );
+  }
   const hue = hueForName(name || "?");
   const initial = (name.trim()[0] ?? "?").toUpperCase();
   return (

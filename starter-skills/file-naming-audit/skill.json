@@ -1,0 +1,32 @@
+{
+  "name": "File Naming Audit",
+  "version": "1.0.0",
+  "description": "Audits a list of filenames against a naming convention pattern and flags violations.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "audit_file_names",
+      "description": "Checks each filename against a regex naming convention (defaults to lowercase-kebab-case with an extension) and returns which ones violate it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "filenames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pattern": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filenames"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

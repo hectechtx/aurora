@@ -1,0 +1,29 @@
+{
+  "name": "Business Name Generator",
+  "version": "1.0.0",
+  "description": "Generates candidate business names by combining a keyword with common prefixes/suffixes.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_business_names",
+      "description": "Generates candidate business names from a keyword combined with common prefixes and suffixes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "keyword": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "keyword"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

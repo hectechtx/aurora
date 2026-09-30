@@ -1,0 +1,48 @@
+{
+  "name": "Critical Path Calculator",
+  "version": "1.0.0",
+  "description": "Computes the critical path (longest dependency chain) and total project duration from a task-dependency list.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_critical_path",
+      "description": "Computes the critical path and total duration for a set of tasks with dependencies.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "durationDays": {
+                  "type": "number"
+                },
+                "dependsOn": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "durationDays",
+                "dependsOn"
+              ]
+            }
+          }
+        },
+        "required": [
+          "tasks"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

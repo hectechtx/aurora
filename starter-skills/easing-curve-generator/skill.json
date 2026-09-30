@@ -1,0 +1,35 @@
+{
+  "name": "Easing Curve Generator",
+  "version": "1.0.0",
+  "description": "Returns cubic-bezier control point values for common named easing styles.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_easing_curve",
+      "description": "Looks up the cubic-bezier control points and CSS string for a named easing style.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "style": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "easeIn",
+              "easeOut",
+              "easeInOut",
+              "easeInBack",
+              "easeOutBack",
+              "easeInOutBack"
+            ]
+          }
+        },
+        "required": [
+          "style"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

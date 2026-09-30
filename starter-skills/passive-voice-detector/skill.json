@@ -1,0 +1,26 @@
+{
+  "name": "Passive Voice Detector",
+  "version": "1.0.0",
+  "description": "Flags sentences likely written in passive voice (a to-be verb followed by a past participle).",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "detect_passive_voice",
+      "description": "Scans text for sentences that look like passive voice constructions and returns them.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

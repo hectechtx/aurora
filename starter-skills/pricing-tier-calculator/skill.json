@@ -1,0 +1,32 @@
+{
+  "name": "Pricing Tier Calculator",
+  "version": "1.0.0",
+  "description": "Suggests good/better/best pricing tiers from a base price and multipliers.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_pricing_tiers",
+      "description": "Generates pricing tiers by applying multipliers to a base price, rounded to a .99 ending.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "basePrice": {
+            "type": "number"
+          },
+          "tierMultipliers": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "basePrice"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

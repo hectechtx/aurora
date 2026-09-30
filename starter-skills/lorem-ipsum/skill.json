@@ -1,0 +1,35 @@
+{
+  "name": "Lorem Ipsum Generator",
+  "version": "1.0.0",
+  "description": "Generates placeholder text for mockups and layouts, by word, sentence, or paragraph count.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_lorem",
+      "description": "Generates placeholder lorem ipsum text. unit is \"words\", \"sentences\", or \"paragraphs\"; count is how many.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "words",
+              "sentences",
+              "paragraphs"
+            ]
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "unit",
+          "count"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

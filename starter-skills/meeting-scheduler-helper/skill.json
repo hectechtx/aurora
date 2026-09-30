@@ -1,0 +1,62 @@
+{
+  "name": "Meeting Scheduler Helper",
+  "version": "1.0.0",
+  "description": "Finds overlapping free time slots across multiple people given their busy-time ranges within a working day.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "find_common_availability",
+      "description": "Finds common free time windows across multiple people's busy schedules within a working day.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "busy": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string"
+                      },
+                      "end": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "busy"
+              ]
+            }
+          },
+          "dayStart": {
+            "type": "string"
+          },
+          "dayEnd": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "people"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

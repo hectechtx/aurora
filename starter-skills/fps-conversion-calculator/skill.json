@@ -1,0 +1,34 @@
+{
+  "name": "FPS Conversion Calculator",
+  "version": "1.0.0",
+  "description": "Converts a duration (in frames) from one frame rate to another, keeping the real-world time constant.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "convert_fps_duration",
+      "description": "Converts a frame count at a source frame rate to the equivalent frame count at a target frame rate, preserving real time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "number"
+          },
+          "sourceFps": {
+            "type": "number"
+          },
+          "targetFps": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "frames",
+          "sourceFps",
+          "targetFps"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

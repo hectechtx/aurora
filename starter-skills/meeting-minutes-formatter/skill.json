@@ -1,0 +1,50 @@
+{
+  "name": "Meeting Minutes Formatter",
+  "version": "1.0.0",
+  "description": "Turns raw meeting notes and an attendee list into structured, formatted meeting minutes.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_minutes",
+      "description": "Formats a meeting title, date, attendees, notes, and optional action items into a markdown minutes document.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "attendees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "actionItems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "date",
+          "attendees",
+          "notes"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

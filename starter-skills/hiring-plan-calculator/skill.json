@@ -1,0 +1,37 @@
+{
+  "name": "Hiring Plan Calculator",
+  "version": "1.0.0",
+  "description": "Computes headcount and budget needed to hit a growth target given current headcount and average salary.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_hiring_plan",
+      "description": "Computes new hires and fully-loaded budget needed to hit a target headcount.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "currentHeadcount": {
+            "type": "number"
+          },
+          "targetHeadcount": {
+            "type": "number"
+          },
+          "averageSalary": {
+            "type": "number"
+          },
+          "benefitsLoadPercent": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "currentHeadcount",
+          "targetHeadcount",
+          "averageSalary"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

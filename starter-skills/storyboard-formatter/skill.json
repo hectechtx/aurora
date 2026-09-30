@@ -1,0 +1,44 @@
+{
+  "name": "Storyboard Formatter",
+  "version": "1.0.0",
+  "description": "Formats a shot list into a structured, numbered storyboard table with cumulative timecodes.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_storyboard",
+      "description": "Formats a list of shots (description, duration, notes) into a numbered markdown storyboard table with cumulative start times.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "shots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "durationSeconds": {
+                  "type": "number"
+                },
+                "notes": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "durationSeconds"
+              ]
+            }
+          }
+        },
+        "required": [
+          "shots"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

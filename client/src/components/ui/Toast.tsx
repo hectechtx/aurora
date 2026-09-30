@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useState } from "react";
 import type { ReactNode } from "react";
-import { CheckCircle2, XCircle, X } from "lucide-react";
+import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ToastItem {
@@ -46,6 +46,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           >
             {t.variant === "success" && <CheckCircle2 size={16} className="text-risk-low mt-0.5 shrink-0" />}
             {t.variant === "error" && <XCircle size={16} className="text-risk-high mt-0.5 shrink-0" />}
+            {t.variant === "default" && <Info size={16} className="text-primary mt-0.5 shrink-0" />}
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">{t.title}</p>
               {t.description && <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>}

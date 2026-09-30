@@ -1,0 +1,34 @@
+{
+  "name": "Unit Converter",
+  "version": "1.0.0",
+  "description": "Converts values between common units of length, weight, temperature, and volume.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "convert_unit",
+      "description": "Converts a numeric value from one unit to another. Length: m, km, cm, mm, mi, yd, ft, in. Weight: kg, g, lb, oz. Temperature: c, f, k. Volume: l, ml, gal, qt.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "from",
+          "to"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

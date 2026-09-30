@@ -1,0 +1,42 @@
+{
+  "name": "Asset Filename Generator",
+  "version": "1.0.0",
+  "description": "Generates a consistent, convention-following asset filename from project, type, version, and date inputs.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_asset_filename",
+      "description": "Builds a slugified, convention-following filename from a project name, asset type, version, date, and extension.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "assetType": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string",
+            "description": "Default v1."
+          },
+          "date": {
+            "type": "string",
+            "description": "ISO date (YYYY-MM-DD). Defaults to today."
+          },
+          "extension": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "assetType",
+          "extension"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

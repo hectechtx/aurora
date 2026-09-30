@@ -1,0 +1,45 @@
+{
+  "name": "Task Priority Matrix",
+  "version": "1.0.0",
+  "description": "Sorts a task list into an Eisenhower urgent/important priority matrix.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "sort_priority_matrix",
+      "description": "Buckets tasks into doFirst/schedule/delegate/eliminate quadrants based on urgency and importance.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "urgent": {
+                  "type": "boolean"
+                },
+                "important": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "urgent",
+                "important"
+              ]
+            }
+          }
+        },
+        "required": [
+          "tasks"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

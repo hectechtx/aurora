@@ -1,0 +1,35 @@
+{
+  "name": "Hash Generator",
+  "version": "1.0.0",
+  "description": "Generates MD5, SHA-1, or SHA-256 hashes of text — useful for verifying document/content integrity or generating stable IDs.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_hash",
+      "description": "Hashes text with the given algorithm (md5, sha1, or sha256) and returns the hex digest.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "algorithm": {
+            "type": "string",
+            "enum": [
+              "md5",
+              "sha1",
+              "sha256"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "algorithm"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

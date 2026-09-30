@@ -1,0 +1,26 @@
+{
+  "name": "Cron Expression Explainer",
+  "version": "1.0.0",
+  "description": "Parses a standard 5-field cron expression and describes it in plain English.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "explain_cron",
+      "description": "Parses a 5-field cron expression and returns a plain-English description.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

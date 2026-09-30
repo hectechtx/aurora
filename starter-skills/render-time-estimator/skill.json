@@ -1,0 +1,30 @@
+{
+  "name": "Render Time Estimator",
+  "version": "1.0.0",
+  "description": "Estimates total render time from per-frame render time and total frame count.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "estimate_render_time",
+      "description": "Estimates total render time in seconds and as an Hh Mm Ss string from per-frame render time and total frame count.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "secondsPerFrame": {
+            "type": "number"
+          },
+          "totalFrames": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "secondsPerFrame",
+          "totalFrames"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

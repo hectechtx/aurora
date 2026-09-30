@@ -1,0 +1,34 @@
+{
+  "name": "DPI Print Size Calculator",
+  "version": "1.0.0",
+  "description": "Computes the physical print size (inches/cm) of an image from its pixel dimensions and DPI.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_print_size",
+      "description": "Computes the physical print size in inches and centimeters from pixel dimensions and a DPI value.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "widthPx": {
+            "type": "number"
+          },
+          "heightPx": {
+            "type": "number"
+          },
+          "dpi": {
+            "type": "number",
+            "description": "Dots per inch. Default 300."
+          }
+        },
+        "required": [
+          "widthPx",
+          "heightPx"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

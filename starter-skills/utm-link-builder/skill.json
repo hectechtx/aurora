@@ -1,0 +1,44 @@
+{
+  "name": "UTM Link Builder",
+  "version": "1.0.0",
+  "description": "Builds a UTM-tagged tracking URL from a base URL and campaign parameters.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "build_utm_link",
+      "description": "Builds a URL with UTM tracking query parameters appended.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "baseUrl": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "medium": {
+            "type": "string"
+          },
+          "campaign": {
+            "type": "string"
+          },
+          "term": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseUrl",
+          "source",
+          "medium",
+          "campaign"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

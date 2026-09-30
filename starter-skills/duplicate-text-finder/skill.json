@@ -1,0 +1,29 @@
+{
+  "name": "Duplicate Text Finder",
+  "version": "1.0.0",
+  "description": "Finds near-duplicate entries in a list of text records using normalized-string comparison.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "find_duplicate_entries",
+      "description": "Normalizes each entry (lowercase, trimmed, collapsed whitespace) and groups originals that share a normalized form, returning only groups with more than one entry.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "entries"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

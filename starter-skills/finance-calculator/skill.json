@@ -1,0 +1,49 @@
+{
+  "name": "Finance Calculator",
+  "version": "1.0.0",
+  "description": "Common business math: percent change, simple interest, and compound interest.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "finance_calc",
+      "description": "Runs a financial calculation. operation \"percent_change\" needs from/to. \"simple_interest\" and \"compound_interest\" need principal, rate (as a percent, e.g. 5 for 5%), and years; compound_interest also takes optional compoundsPerYear (default 12).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "percent_change",
+              "simple_interest",
+              "compound_interest"
+            ]
+          },
+          "from": {
+            "type": "number"
+          },
+          "to": {
+            "type": "number"
+          },
+          "principal": {
+            "type": "number"
+          },
+          "rate": {
+            "type": "number"
+          },
+          "years": {
+            "type": "number"
+          },
+          "compoundsPerYear": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

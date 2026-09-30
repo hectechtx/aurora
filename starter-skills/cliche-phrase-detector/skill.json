@@ -1,0 +1,26 @@
+{
+  "name": "Cliche Phrase Detector",
+  "version": "1.0.0",
+  "description": "Flags common cliche phrases from a built-in list (e.g. \"at the end of the day\").",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "detect_cliches",
+      "description": "Scans text for common cliche phrases and counts how often each appears.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

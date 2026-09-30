@@ -1,0 +1,26 @@
+{
+  "name": "Golden Ratio Layout Calculator",
+  "version": "1.0.0",
+  "description": "Computes golden-ratio-based layout divisions for a given canvas dimension.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_golden_ratio_layout",
+      "description": "Splits a given dimension into golden-ratio-proportioned large and small sections.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dimension": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dimension"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

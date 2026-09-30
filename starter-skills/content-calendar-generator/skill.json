@@ -1,0 +1,42 @@
+{
+  "name": "Content Calendar Generator",
+  "version": "1.0.0",
+  "description": "Spaces out a list of content ideas across a date range with platform rotation.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_content_calendar",
+      "description": "Generates a content calendar spacing ideas across dates and rotating through platforms.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string"
+          },
+          "ideas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postsPerWeek": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "startDate",
+          "ideas"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

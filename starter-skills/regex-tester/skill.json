@@ -1,0 +1,33 @@
+{
+  "name": "Regex Tester",
+  "version": "1.0.0",
+  "description": "Tests a regular expression against sample text and returns all matches with capture groups.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "test_regex",
+      "description": "Tests a regex pattern against text and returns all matches with capture groups.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "flags": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern",
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

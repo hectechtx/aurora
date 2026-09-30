@@ -1,0 +1,45 @@
+{
+  "name": "Budget Variance Calculator",
+  "version": "1.0.0",
+  "description": "Compares budgeted vs. actual figures line by line and reports the variance amount and percentage.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_budget_variance",
+      "description": "Compares budgeted vs. actual figures line by line and reports variance amount and percentage.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "budgeted": {
+                  "type": "number"
+                },
+                "actual": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "budgeted",
+                "actual"
+              ]
+            }
+          }
+        },
+        "required": [
+          "lines"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

@@ -1,0 +1,38 @@
+{
+  "name": "Sponsorship Rate Calculator",
+  "version": "1.0.0",
+  "description": "Estimates a rough sponsorship/collab rate from follower count and engagement rate, using a commonly-cited rule-of-thumb formula — a starting point for negotiation, NOT a guaranteed market rate.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "estimate_sponsorship_rate",
+      "description": "Estimates a rough sponsorship rate from follower count, engagement rate, and post type.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "followers": {
+            "type": "number"
+          },
+          "engagementRatePercent": {
+            "type": "number"
+          },
+          "postType": {
+            "type": "string",
+            "enum": [
+              "feed",
+              "story",
+              "reel"
+            ]
+          }
+        },
+        "required": [
+          "followers",
+          "engagementRatePercent"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

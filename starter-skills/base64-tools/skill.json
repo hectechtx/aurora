@@ -1,0 +1,34 @@
+{
+  "name": "Base64 Tools",
+  "version": "1.0.0",
+  "description": "Encodes text to base64 or decodes base64 back to text.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "base64_convert",
+      "description": "Encodes text to base64 or decodes a base64 string back to text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "encode",
+              "decode"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "mode"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

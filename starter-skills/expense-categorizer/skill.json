@@ -1,0 +1,41 @@
+{
+  "name": "Expense Categorizer",
+  "version": "1.0.0",
+  "description": "Categorizes a list of expense descriptions into common accounting categories using keyword rules.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "categorize_expenses",
+      "description": "Categorizes a list of expense descriptions into common accounting categories using keyword rules.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expenses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "amount"
+              ]
+            }
+          }
+        },
+        "required": [
+          "expenses"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

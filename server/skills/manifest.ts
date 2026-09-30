@@ -26,14 +26,33 @@ export function loadManifest(skillRootDir: string): SkillManifest {
     throw new ManifestError(`skill.json failed validation: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
   }
   const manifest = parsed.data;
-
   const resolvedRoot = path.resolve(skillRootDir);
-  const resolvedEntry = path.resolve(skillRootDir, manifest.entrypoint);
-  if (resolvedEntry !== resolvedRoot && !resolvedEntry.startsWith(resolvedRoot + path.sep)) {
-    throw new ManifestError(`entrypoint "${manifest.entrypoint}" escapes the skill directory.`);
+
+  // Knowledge-only skills have no entrypoint — nothing executable to guard.
+  if (manifest.entrypoint) {
+    const resolvedEntry = path.resolve(skillRootDir, manifest.entrypoint);
+    if (resolvedEntry !== resolvedRoot && !resolvedEntry.startsWith(resolvedRoot + path.sep)) {
+      throw new ManifestError(`entrypoint "${manifest.entrypoint}" escapes the skill directory.`);
+    }
+    if (!fs.existsSync(resolvedEntry)) {
+      throw new ManifestError(`entrypoint "${manifest.entrypoint}" does not exist in the downloaded repo.`);
+    }
   }
-  if (!fs.existsSync(resolvedEntry)) {
-    throw new ManifestError(`entrypoint "${manifest.entrypoint}" does not exist in the downloaded repo.`);
+
+  // Same traversal guard for an instructions file, then fold its content
+  // into the manifest so downstream consumers (DB, agent-loop) only ever
+  // deal with manifest.instructions and never re-resolve paths themselves.
+  if (manifest.instructionsFile) {
+    const resolvedInstr = path.resolve(skillRootDir, manifest.instructionsFile);
+    if (resolvedInstr !== resolvedRoot && !resolvedInstr.startsWith(resolvedRoot + path.sep)) {
+      throw new ManifestError(`instructionsFile "${manifest.instructionsFile}" escapes the skill directory.`);
+    }
+    if (!fs.existsSync(resolvedInstr)) {
+      throw new ManifestError(`instructionsFile "${manifest.instructionsFile}" does not exist in the downloaded repo.`);
+    }
+    const fileText = fs.readFileSync(resolvedInstr, "utf-8").trim();
+    if (!fileText) throw new ManifestError(`instructionsFile "${manifest.instructionsFile}" is empty.`);
+    manifest.instructions = [manifest.instructions, fileText].filter(Boolean).join("\n\n").slice(0, 20_000);
   }
 
   return manifest;

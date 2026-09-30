@@ -1,0 +1,45 @@
+{
+  "name": "Quarterly Goals Tracker",
+  "version": "1.0.0",
+  "description": "Formats a list of quarterly goals with progress percentages into a status report, flagging at-risk goals.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "track_quarterly_goals",
+      "description": "Formats quarterly goals into a status report and flags at-risk goals.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "progressPercent": {
+                  "type": "number"
+                },
+                "dueInWeeks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "progressPercent",
+                "dueInWeeks"
+              ]
+            }
+          }
+        },
+        "required": [
+          "goals"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

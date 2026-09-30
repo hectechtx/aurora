@@ -1,0 +1,36 @@
+{
+  "name": "Frame Timing Calculator",
+  "version": "1.0.0",
+  "description": "Converts between frame number, seconds, and timecode (HH:MM:SS:FF) at a given frame rate.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "convert_frame_timing",
+      "description": "Converts a duration at a given frame rate between frames, seconds, and HH:MM:SS:FF timecode. Provide exactly one of frames, seconds, or timecode.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fps": {
+            "type": "number"
+          },
+          "frames": {
+            "type": "number"
+          },
+          "seconds": {
+            "type": "number"
+          },
+          "timecode": {
+            "type": "string",
+            "description": "Format HH:MM:SS:FF"
+          }
+        },
+        "required": [
+          "fps"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

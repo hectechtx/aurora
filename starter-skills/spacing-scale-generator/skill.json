@@ -1,0 +1,33 @@
+{
+  "name": "Spacing Scale Generator",
+  "version": "1.0.0",
+  "description": "Generates a modular spacing scale (in px and rem) from a base unit and a ratio.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_spacing_scale",
+      "description": "Generates a modular spacing scale in px and rem from a base unit, step count, and ratio.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "baseUnitPx": {
+            "type": "number",
+            "description": "Base spacing unit in px. Default 4."
+          },
+          "steps": {
+            "type": "number",
+            "description": "Number of steps in the scale. Default 8."
+          },
+          "ratio": {
+            "type": "number",
+            "description": "Multiplier ratio between steps. Default 1.5."
+          }
+        },
+        "required": []
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

@@ -1,0 +1,32 @@
+{
+  "name": "Story Outline Generator",
+  "version": "1.0.0",
+  "description": "Turns a list of story beats into a structured three-act outline skeleton.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_outline",
+      "description": "Divides a list of story beats into a three-act outline (Setup, Confrontation, Resolution).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "beats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "beats"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

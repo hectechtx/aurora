@@ -1,0 +1,30 @@
+{
+  "name": "Retention Schedule Calculator",
+  "version": "1.0.0",
+  "description": "Computes a document's scheduled disposal/review date from its creation date and a retention policy in years.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_retention_schedule",
+      "description": "Adds a retention period in years to a creation date to produce the scheduled disposal date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "creationDate": {
+            "type": "string"
+          },
+          "retentionYears": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "creationDate",
+          "retentionYears"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Legal & Compliance"
+}

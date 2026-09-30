@@ -1,0 +1,37 @@
+{
+  "name": "Legal Deadline Calculator",
+  "version": "1.0.0",
+  "description": "Computes a deadline date from a trigger date plus a number of calendar or business days. A scheduling aid only — NOT legal advice on which deadline rules actually apply to your matter.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_legal_deadline",
+      "description": "Adds a number of calendar or business days to a trigger date to compute a deadline date, skipping weekends for business days.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "triggerDate": {
+            "type": "string"
+          },
+          "days": {
+            "type": "number"
+          },
+          "dayType": {
+            "type": "string",
+            "enum": [
+              "calendar",
+              "business"
+            ]
+          }
+        },
+        "required": [
+          "triggerDate",
+          "days"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Legal & Compliance"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "CSV Analyzer",
+  "version": "1.0.0",
+  "description": "Parses CSV text and returns structure and per-column statistics (row/column counts, types, numeric min/max/mean/sum, top values). Lets an agent actually understand a spreadsheet or data export instead of guessing.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "analyze_csv",
+      "description": "Analyze CSV text and return column names, row count, and per-column stats (numeric summaries, or most-common values for text columns). Paste CSV content in as 'csv'.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "csv": { "type": "string", "description": "The raw CSV text (including a header row)." },
+          "delimiter": { "type": "string", "description": "Optional field delimiter (default ','). Use '\\t' for TSV." }
+        },
+        "required": ["csv"]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Data & Analysis"
+}

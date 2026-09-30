@@ -1,0 +1,30 @@
+{
+  "name": "Slug Generator",
+  "version": "1.0.0",
+  "description": "Converts a title or phrase into a URL-safe slug.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_slug",
+      "description": "Converts text into a lowercase, hyphen-separated, URL-safe slug.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "maxLength": {
+            "type": "number",
+            "description": "Optional max length to truncate the slug to"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Marketing & Social"
+}

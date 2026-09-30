@@ -1,0 +1,26 @@
+{
+  "name": "Dialogue Formatter",
+  "version": "1.0.0",
+  "description": "Formats raw dialogue lines (Name: text per line) into standard prose format with quotation marks and attribution.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_dialogue",
+      "description": "Converts 'Name: text' lines into '\"text,\" said Name.' prose format.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "lines"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

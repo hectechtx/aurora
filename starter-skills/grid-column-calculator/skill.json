@@ -1,0 +1,34 @@
+{
+  "name": "Grid Column Calculator",
+  "version": "1.0.0",
+  "description": "Computes column width for a CSS grid given total container width, number of columns, and gutter size.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_grid_columns",
+      "description": "Computes the per-column width for a CSS grid from container width, column count, and gutter size.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "containerWidth": {
+            "type": "number"
+          },
+          "columns": {
+            "type": "number"
+          },
+          "gutter": {
+            "type": "number",
+            "description": "Gap between columns in px. Default 16."
+          }
+        },
+        "required": [
+          "containerWidth",
+          "columns"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

@@ -1,0 +1,45 @@
+{
+  "name": "Color Format Converter",
+  "version": "1.0.0",
+  "description": "Converts a color between HEX, RGB, HSL, and an approximate CMYK representation.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "convert_color_format",
+      "description": "Converts a color string from one format (hex, rgb, hsl) to another (hex, rgb, hsl, cmyk).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "enum": [
+              "hex",
+              "rgb",
+              "hsl"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "enum": [
+              "hex",
+              "rgb",
+              "hsl",
+              "cmyk"
+            ]
+          }
+        },
+        "required": [
+          "color",
+          "from",
+          "to"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

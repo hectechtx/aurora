@@ -1,0 +1,23 @@
+{
+  "name": "Web Search",
+  "version": "1.0.0",
+  "description": "Searches the web (via DuckDuckGo, no API key needed) and returns the top results as title + URL + snippet. Lets an agent find sources it can then read with Web Fetch.",
+  "entrypoint": "index.js",
+  "risk": "medium",
+  "tools": [
+    {
+      "name": "web_search",
+      "description": "Search the web and return the top results (title, url, snippet). Use to discover pages/sources for a topic; pair with web_fetch to read the promising ones.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "The search query." },
+          "limit": { "type": "number", "description": "Max results to return (default 8, max 20)." }
+        },
+        "required": ["query"]
+      },
+      "risk": "medium"
+    }
+  ],
+  "category": "Research & Web"
+}

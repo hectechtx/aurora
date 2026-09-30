@@ -1,0 +1,45 @@
+{
+  "name": "Legal Citation Formatter",
+  "version": "1.0.0",
+  "description": "Formats a case citation into Bluebook-style format from structured inputs. A formatting aid only — not legal advice.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_legal_citation",
+      "description": "Builds a Bluebook-style case citation string from case name, volume, reporter, page, year, and optional court.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "caseName": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "string"
+          },
+          "reporter": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string"
+          },
+          "year": {
+            "type": "string"
+          },
+          "court": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "caseName",
+          "volume",
+          "reporter",
+          "page",
+          "year"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

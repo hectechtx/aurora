@@ -1,0 +1,38 @@
+{
+  "name": "Recurring Schedule Generator",
+  "version": "1.0.0",
+  "description": "Generates the next N occurrence dates from a start date and a recurrence rule.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_recurring_dates",
+      "description": "Generates a list of recurring occurrence dates based on frequency.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "startDate",
+          "frequency"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

@@ -1,0 +1,50 @@
+{
+  "name": "JSON Tools",
+  "version": "1.0.0",
+  "description": "Validates, pretty-prints, or minifies JSON, and converts between JSON and CSV.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "format_json",
+      "description": "Validates JSON text and returns it pretty-printed or minified. mode is \"pretty\" or \"minify\".",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "pretty",
+              "minify"
+            ]
+          }
+        },
+        "required": [
+          "json"
+        ]
+      },
+      "risk": "low"
+    },
+    {
+      "name": "json_to_csv",
+      "description": "Converts a JSON array of flat objects into CSV text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "string",
+            "description": "A JSON array of objects"
+          }
+        },
+        "required": [
+          "json"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

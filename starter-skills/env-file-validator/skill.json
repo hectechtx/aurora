@@ -1,0 +1,26 @@
+{
+  "name": "Env File Validator",
+  "version": "1.0.0",
+  "description": "Validates a .env-style text block for duplicate keys, syntax errors, and empty values.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "validate_env_file",
+      "description": "Validates .env-style content and reports syntax errors, duplicate keys, and empty values.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

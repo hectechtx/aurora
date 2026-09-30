@@ -1,0 +1,34 @@
+{
+  "name": "Loan Amortization Calculator",
+  "version": "1.0.0",
+  "description": "Generates a full loan amortization schedule from principal, annual interest rate, and term in months.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "calculate_amortization",
+      "description": "Generates a full loan amortization schedule from principal, annual interest rate, and term in months.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "principal": {
+            "type": "number"
+          },
+          "annualRatePercent": {
+            "type": "number"
+          },
+          "termMonths": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "principal",
+          "annualRatePercent",
+          "termMonths"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Business & Finance"
+}

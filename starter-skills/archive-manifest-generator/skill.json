@@ -1,0 +1,44 @@
+{
+  "name": "Archive Manifest Generator",
+  "version": "1.0.0",
+  "description": "Generates a structured manifest list (filename, formatted size, date added) from a list of files for archival cataloging.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "generate_archive_manifest",
+      "description": "Builds a manifest with human-readable file sizes and default dates from a list of files with filename and sizeBytes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "type": "number"
+                },
+                "dateAdded": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "filename",
+                "sizeBytes"
+              ]
+            }
+          }
+        },
+        "required": [
+          "files"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Developer Tools"
+}

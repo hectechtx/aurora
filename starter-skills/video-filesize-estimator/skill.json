@@ -1,0 +1,33 @@
+{
+  "name": "Video Filesize Estimator",
+  "version": "1.0.0",
+  "description": "Estimates output video file size from video bitrate, duration, and audio bitrate.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "estimate_video_filesize",
+      "description": "Estimates the resulting video file size in megabytes from bitrate and duration.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "videoBitrateKbps": {
+            "type": "number"
+          },
+          "durationSeconds": {
+            "type": "number"
+          },
+          "audioBitrateKbps": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "videoBitrateKbps",
+          "durationSeconds"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

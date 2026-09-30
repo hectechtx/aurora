@@ -1,0 +1,29 @@
+{
+  "name": "Word Repetition Finder",
+  "version": "1.0.0",
+  "description": "Finds words repeated within a short window of each other — a common line-editing issue.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "find_repetition",
+      "description": "Finds words that repeat within a nearby window of words in the text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "windowWords": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Writing & Editing"
+}

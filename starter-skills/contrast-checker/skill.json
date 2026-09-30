@@ -1,0 +1,32 @@
+{
+  "name": "Contrast Checker",
+  "version": "1.0.0",
+  "description": "Checks the WCAG contrast ratio between two hex colors, e.g. text vs. background, and whether it passes AA/AAA accessibility thresholds.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "contrast_ratio",
+      "description": "Computes the WCAG contrast ratio between two hex colors and whether it passes AA (4.5:1) and AAA (7:1) for normal text.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "foreground": {
+            "type": "string",
+            "description": "Text color, e.g. #ffffff"
+          },
+          "background": {
+            "type": "string",
+            "description": "Background color, e.g. #222222"
+          }
+        },
+        "required": [
+          "foreground",
+          "background"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Design & Visual"
+}

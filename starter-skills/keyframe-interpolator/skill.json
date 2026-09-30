@@ -1,0 +1,44 @@
+{
+  "name": "Keyframe Interpolator",
+  "version": "1.0.0",
+  "description": "Computes in-between values for linear or eased interpolation between a start and end keyframe value.",
+  "entrypoint": "index.js",
+  "risk": "low",
+  "tools": [
+    {
+      "name": "interpolate_keyframes",
+      "description": "Computes a sequence of in-between values between a start and end value using linear or eased interpolation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "startValue": {
+            "type": "number"
+          },
+          "endValue": {
+            "type": "number"
+          },
+          "steps": {
+            "type": "number"
+          },
+          "easing": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "easeIn",
+              "easeOut",
+              "easeInOut"
+            ],
+            "description": "Default linear."
+          }
+        },
+        "required": [
+          "startValue",
+          "endValue",
+          "steps"
+        ]
+      },
+      "risk": "low"
+    }
+  ],
+  "category": "Video & Film"
+}

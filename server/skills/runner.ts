@@ -30,7 +30,13 @@ export interface SkillRunResult {
 }
 
 export async function runSkillTool(skill: InstalledSkill, toolName: string, args: Record<string, unknown>): Promise<SkillRunResult> {
-  const manifest = JSON.parse(skill.manifest) as { entrypoint: string };
+  const manifest = JSON.parse(skill.manifest) as { entrypoint?: string };
+  // Knowledge-only skills have no entrypoint and expose no tools, so this
+  // should be unreachable for them — but a malformed manifest shouldn't
+  // crash the loop with a path.join(undefined) either.
+  if (!manifest.entrypoint) {
+    return { ok: false, error: `skill "${skill.name}" has no entrypoint (knowledge-only skill?)`, stderr: "", timedOut: false, durationMs: 0 };
+  }
   const entrypointPath = path.join(skill.sourcePath, manifest.entrypoint);
   const start = Date.now();
 
@@ -39,7 +45,16 @@ export async function runSkillTool(skill: InstalledSkill, toolName: string, args
     let stderr = "";
     let timedOut = false;
 
-    const child = spawn(process.execPath, [entrypointPath], { cwd: skill.sourcePath });
+    // process.execPath is a real node binary in dev, but is AURORA.exe
+    // itself in the packaged Electron app — spawning that directly on a .js
+    // file launches a second Electron GUI instance instead of running the
+    // skill, which is why every skill silently produced no stdout there.
+    // ELECTRON_RUN_AS_NODE makes Electron's binary behave as plain Node when
+    // spawned as a child process; harmless no-op for a real node.exe.
+    const child = spawn(process.execPath, [entrypointPath], {
+      cwd: skill.sourcePath,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    });
 
     const timer = setTimeout(() => {
       timedOut = true;

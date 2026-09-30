@@ -40,7 +40,11 @@ export default function Tasks() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const voice = useVoice();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // ?task=<id> deep-links straight to a task (e.g. from the Browser page's "Ask AURORA" bar).
+  const [selectedId, setSelectedId] = useState<number | null>(() => {
+    const fromUrl = Number(new URLSearchParams(window.location.search).get("task"));
+    return Number.isInteger(fromUrl) && fromUrl > 0 ? fromUrl : null;
+  });
   const [newTitle, setNewTitle] = useState("");
   const [input, setInput] = useState("");
   const [viewMode, setViewMode] = useState<"response" | "thinking">("response");

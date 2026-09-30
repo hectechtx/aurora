@@ -1,11 +1,39 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ArrowLeft, ArrowRight, RotateCw, Globe } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { ArrowLeft, ArrowRight, RotateCw, Globe, Sparkles, Bookmark, X } from "lucide-react";
 
 const DEFAULT_URL = "https://www.google.com";
+
+// Must match BROWSER_PARTITION in server/browser-tool.ts: this webview and the
+// hidden pages agents drive share one persistent signed-in session, so a site
+// you log into here is one AURORA's agents can work inside (Polar-style).
+const BROWSER_PARTITION = "persist:aurora-web";
+
+const SAVED_PROMPTS_KEY = "aurora.browser.savedPrompts";
+const DEFAULT_PROMPTS = [
+  "Summarize this page",
+  "Pull the key facts from this page into a table",
+  "Find contact info on this site",
+];
+
+function loadSavedPrompts(): string[] {
+  try {
+    const raw = localStorage.getItem(SAVED_PROMPTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed.filter((p) => typeof p === "string") : DEFAULT_PROMPTS;
+  } catch {
+    return DEFAULT_PROMPTS;
+  }
+}
+
+function storeSavedPrompts(prompts: string[]): void {
+  try { localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(prompts)); } catch { /* best-effort */ }
+}
 
 /** The subset of Electron's WebviewTag API this page actually uses — kept local rather than depending on the `electron` package from client code, which only ever runs in a renderer. */
 interface WebviewEl extends HTMLElement {
@@ -70,6 +98,49 @@ export default function Browser() {
     webviewRef.current?.loadURL(url);
   }
 
+  const [, navigate] = useLocation();
+  const [instruction, setInstruction] = useState("");
+  const [savedPrompts, setSavedPrompts] = useState<string[]>(loadSavedPrompts);
+  const [asking, setAsking] = useState(false);
+
+  // Hands the current tab + an instruction to AURORA as a new task, then jumps
+  // to it. The chat request is deliberately not awaited: an agent turn can run
+  // for minutes, and the server keeps working after we navigate away.
+  async function askAurora(text: string) {
+    const ask = text.trim();
+    if (!ask || asking) return;
+    setAsking(true);
+    try {
+      const el = webviewRef.current;
+      const url = el?.getURL() || addressBar;
+      const title = el?.getTitle() || url;
+      const task = await apiRequest("POST", "/api/tasks", { title: `Web: ${ask.slice(0, 60)}` }).then((r) => r.json()) as { id: number };
+      const message =
+        `[Browser] I'm on "${title}" — ${url}\n\n${ask}\n\n` +
+        `Use browse_interact on that URL to read it or act on it — it runs in my signed-in browser session, ` +
+        `so you can work inside sites I'm logged into. Use web_search/web_fetch for anything else you need.`;
+      void apiRequest("POST", `/api/tasks/${task.id}/chat`, { message }).catch(() => {});
+      setInstruction("");
+      navigate(`/tasks?task=${task.id}`);
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  function savePrompt(text: string) {
+    const p = text.trim();
+    if (!p || savedPrompts.includes(p)) return;
+    const next = [...savedPrompts, p];
+    setSavedPrompts(next);
+    storeSavedPrompts(next);
+  }
+
+  function removePrompt(p: string) {
+    const next = savedPrompts.filter((x) => x !== p);
+    setSavedPrompts(next);
+    storeSavedPrompts(next);
+  }
+
   if (!isElectron) {
     return (
       <div className="p-8 max-w-3xl mx-auto h-screen flex items-center justify-center">
@@ -105,9 +176,33 @@ export default function Browser() {
           />
           <Button variant="outline" onClick={() => go(addressBar)}>Go</Button>
         </div>
+        <div className="flex items-center gap-2">
+          <Sparkles size={15} className="text-primary shrink-0" />
+          <Input
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void askAurora(instruction); }}
+            placeholder="Ask AURORA to do something on this page…"
+            className="flex-1"
+          />
+          <Button variant="ghost" size="icon" onClick={() => savePrompt(instruction)} disabled={!instruction.trim()} title="Save as a quick prompt">
+            <Bookmark size={14} />
+          </Button>
+          <Button onClick={() => void askAurora(instruction)} disabled={!instruction.trim() || asking}>Ask AURORA</Button>
+        </div>
+        {savedPrompts.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {savedPrompts.map((p) => (
+              <span key={p} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-xs">
+                <button type="button" className="hover:text-primary" onClick={() => void askAurora(p)} title="Run on this page">{p}</button>
+                <button type="button" className="opacity-50 hover:opacity-100" onClick={() => removePrompt(p)} title="Remove"><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex-1 min-h-0">
-        <webview ref={webviewRef as never} src={DEFAULT_URL} className="w-full h-full" allowpopups="true" />
+        <webview ref={webviewRef as never} src={DEFAULT_URL} partition={BROWSER_PARTITION} className="w-full h-full" allowpopups="true" />
       </div>
     </div>
   );

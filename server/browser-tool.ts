@@ -29,6 +29,14 @@ const MAX_WAIT_MS = 5_000;
 const MAX_TEXT_CHARS = 8_000;
 const MAX_ACTIONS = 8;
 
+// Shared, persistent session between the Browser page's <webview> and the
+// hidden windows agents drive — Polar-style: sign in to a site once in the
+// Browser page and agents act inside that same signed-in session (cookies,
+// localStorage), instead of every agent call landing on a logged-out page.
+// Must match BROWSER_PARTITION in client/src/pages/Browser.tsx. Clicks/fills
+// in that session stay approval-gated (browse_interact is risk "medium").
+export const BROWSER_PARTITION = "persist:aurora-web";
+
 export class BrowserToolError extends Error {}
 
 export async function isInteractiveBrowsingAvailable(): Promise<boolean> {
@@ -112,7 +120,7 @@ export async function browseInteract(url: string, actions: BrowseAction[]): Prom
 
   const win = new electron.BrowserWindow({
     show: false,
-    webPreferences: { offscreen: false, sandbox: true, contextIsolation: true, nodeIntegration: false },
+    webPreferences: { offscreen: false, sandbox: true, contextIsolation: true, nodeIntegration: false, partition: BROWSER_PARTITION },
   });
 
   const notes: string[] = [];

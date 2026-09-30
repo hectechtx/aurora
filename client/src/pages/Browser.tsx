@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, ArrowRight, RotateCw, Globe, Sparkles, Bookmark, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, Globe, Sparkles, Bookmark, X, CalendarClock, Eye } from "lucide-react";
 
 const DEFAULT_URL = "https://www.google.com";
 
@@ -33,6 +34,25 @@ function loadSavedPrompts(): string[] {
 
 function storeSavedPrompts(prompts: string[]): void {
   try { localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(prompts)); } catch { /* best-effort */ }
+}
+
+const SCHEDULES = [
+  { label: "Every hour", minutes: 60 },
+  { label: "Every 6 hours", minutes: 360 },
+  { label: "Daily", minutes: 1440 },
+  { label: "Weekly", minutes: 10080 },
+];
+
+interface AgentTab { key: string; label: string; url: string; title: string; visible: boolean; idleSeconds: number }
+
+/** The instruction an agent actually receives — the owner's words plus the page they were on and how to work in the browser. */
+function webInstruction(ask: string, url: string, title: string): string {
+  return (
+    `[Browser] Starting page: "${title}" — ${url}\n\n${ask}\n\n` +
+    `Work in your browser tab — it's signed in wherever I am. Use browse_page to open/read pages and follow links, ` +
+    `and browse_interact when you need to click, type, or submit. Keep going step by step until it's done, ` +
+    `then report what you did and what you found. Use any of your other tools too if the job needs them.`
+  );
 }
 
 /** The subset of Electron's WebviewTag API this page actually uses — kept local rather than depending on the `electron` package from client code, which only ever runs in a renderer. */
@@ -115,16 +135,53 @@ export default function Browser() {
       const url = el?.getURL() || addressBar;
       const title = el?.getTitle() || url;
       const task = await apiRequest("POST", "/api/tasks", { title: `Web: ${ask.slice(0, 60)}` }).then((r) => r.json()) as { id: number };
-      const message =
-        `[Browser] I'm on "${title}" — ${url}\n\n${ask}\n\n` +
-        `Use browse_interact on that URL to read it or act on it — it runs in my signed-in browser session, ` +
-        `so you can work inside sites I'm logged into. Use web_search/web_fetch for anything else you need.`;
-      void apiRequest("POST", `/api/tasks/${task.id}/chat`, { message }).catch(() => {});
+      void apiRequest("POST", `/api/tasks/${task.id}/chat`, { message: webInstruction(ask, url, title) }).catch(() => {});
       setInstruction("");
       navigate(`/tasks?task=${task.id}`);
     } finally {
       setAsking(false);
     }
+  }
+
+  // ---- Workflows: a saved instruction an agent re-runs on a schedule ----
+  const { data: agents = [] } = useQuery<{ id: number; name: string; status: string }[]>({ queryKey: ["/api/agents"] });
+  const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [workflowAgent, setWorkflowAgent] = useState<number | null>(null);
+  const [workflowEvery, setWorkflowEvery] = useState(1440);
+  const [workflowMsg, setWorkflowMsg] = useState<string | null>(null);
+
+  async function saveWorkflow() {
+    const ask = instruction.trim();
+    const agentId = workflowAgent ?? agents[0]?.id;
+    if (!ask || !agentId) return;
+    const el = webviewRef.current;
+    const url = el?.getURL() || addressBar;
+    const content = webInstruction(ask, url, el?.getTitle() || url);
+    try {
+      await apiRequest("POST", `/api/agents/${agentId}/recurring`, { content, scheduleMinutes: workflowEvery });
+      // Run it once right away too, so the owner sees it work instead of waiting a whole cycle.
+      await apiRequest("POST", `/api/agents/${agentId}/queue`, { content });
+      void apiRequest("POST", `/api/agents/${agentId}/run`).catch(() => {});
+      const name = agents.find((a) => a.id === agentId)?.name.trim() ?? "the agent";
+      setWorkflowMsg(`Saved — ${name} runs it now and then ${SCHEDULES.find((s) => s.minutes === workflowEvery)?.label.toLowerCase() ?? `every ${workflowEvery} min`}. Manage it on the Agents page.`);
+      setWorkflowOpen(false);
+      setInstruction("");
+    } catch (err) {
+      setWorkflowMsg(`Couldn't save workflow: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // ---- Agent tabs: watch or take over what an agent is doing ----
+  const { data: agentTabs = [], refetch: refetchTabs } = useQuery<AgentTab[]>({ queryKey: ["/api/browser/sessions"], refetchInterval: 3000 });
+
+  async function watchTab(key: string) {
+    await apiRequest("POST", `/api/browser/sessions/${encodeURIComponent(key)}/show`).catch(() => {});
+    void refetchTabs();
+  }
+
+  async function closeTab(key: string) {
+    await apiRequest("DELETE", `/api/browser/sessions/${encodeURIComponent(key)}`).catch(() => {});
+    void refetchTabs();
   }
 
   function savePrompt(text: string) {
@@ -188,8 +245,46 @@ export default function Browser() {
           <Button variant="ghost" size="icon" onClick={() => savePrompt(instruction)} disabled={!instruction.trim()} title="Save as a quick prompt">
             <Bookmark size={14} />
           </Button>
+          <Button variant="ghost" size="icon" onClick={() => { setWorkflowMsg(null); setWorkflowOpen((o) => !o); }} disabled={!instruction.trim()} title="Save as a scheduled workflow">
+            <CalendarClock size={14} />
+          </Button>
           <Button onClick={() => void askAurora(instruction)} disabled={!instruction.trim() || asking}>Ask AURORA</Button>
         </div>
+        {workflowOpen && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2 text-sm">
+            <span className="opacity-70">Run this as a workflow with</span>
+            <select
+              className="rounded-md border border-border bg-transparent px-2 py-1"
+              value={workflowAgent ?? agents[0]?.id ?? ""}
+              onChange={(e) => setWorkflowAgent(Number(e.target.value))}
+            >
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name.trim()}</option>)}
+            </select>
+            <select
+              className="rounded-md border border-border bg-transparent px-2 py-1"
+              value={workflowEvery}
+              onChange={(e) => setWorkflowEvery(Number(e.target.value))}
+            >
+              {SCHEDULES.map((s) => <option key={s.minutes} value={s.minutes}>{s.label}</option>)}
+            </select>
+            <Button size="sm" onClick={() => void saveWorkflow()} disabled={agents.length === 0}>Save workflow</Button>
+            {agents.length === 0 && <span className="opacity-70">Create an agent first (Agents page).</span>}
+          </div>
+        )}
+        {workflowMsg && <div className="text-xs opacity-80">{workflowMsg}</div>}
+        {agentTabs.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="opacity-70">Agents browsing:</span>
+            {agentTabs.map((t) => (
+              <span key={t.key} className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-2.5 py-0.5" title={t.url}>
+                <span className="font-medium">{t.label}</span>
+                <span className="max-w-[16rem] truncate opacity-70">{t.title || t.url || "starting…"}</span>
+                <button type="button" className="hover:text-primary" onClick={() => void watchTab(t.key)} title="Watch / take over in a window"><Eye size={12} /></button>
+                <button type="button" className="opacity-50 hover:opacity-100" onClick={() => void closeTab(t.key)} title="Close this agent's tab"><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+        )}
         {savedPrompts.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {savedPrompts.map((p) => (

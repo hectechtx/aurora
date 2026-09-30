@@ -49,6 +49,7 @@ import {
 } from "@shared/schema";
 import { getCreationsDir, setCreationsDir, getMusicDir, setMusicDir, getDownloadsDir, UPDATE_SOURCE_DIR } from "./paths";
 import { getElectronApis } from "./electron-bridge";
+import { listBrowserSessions, showBrowserSession, closeBrowserSession } from "./browser-tool";
 import { log } from "./app";
 
 /** Parses a route :id param, writing a 400 and returning null if it isn't a real integer — a malformed/non-numeric id would otherwise flow into a Drizzle query as NaN. */
@@ -1195,6 +1196,21 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
 
   // God's Eye View — a separate local app (its own server on 4173), embedded
   // as a door in AURORA. Not auto-started, so this just reports reachability.
+  // ---- Agent browser tabs (Polar-style watch / take over) ----
+  app.get("/api/browser/sessions", (_req, res) => {
+    res.json(listBrowserSessions());
+  });
+
+  app.post("/api/browser/sessions/:key/show", (req, res) => {
+    if (!showBrowserSession(req.params.key)) return res.status(404).json({ message: "That agent tab isn't open anymore." });
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/browser/sessions/:key", (req, res) => {
+    closeBrowserSession(req.params.key);
+    res.json({ ok: true });
+  });
+
   app.get("/api/godseye/status", async (_req, res) => {
     const url = "http://localhost:4173";
     let live = false;

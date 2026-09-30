@@ -18,7 +18,7 @@ import { generateImage } from "./imagegen";
 import { generateVideo, isVideoGenInstalled } from "./videogen";
 import { searchAndDownloadTrack } from "./musicsearch";
 import { webSearch, webFetch, fetchImageBytes } from "./web-tools";
-import { browseInteract, BrowserToolError, type BrowseAction } from "./browser-tool";
+import { browseInteract, BrowserToolError, READ_ONLY_ACTIONS, type BrowseAction } from "./browser-tool";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
 import { getCreationsDir, SELF_SOURCE_DIR } from "./paths";
 
@@ -208,28 +208,51 @@ function builtinTools(): ToolDef[] {
       parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
     },
     {
-      name: "browse_interact", kind: "builtin", risk: "medium",
-      description: "Loads a real page (JavaScript included, unlike web_fetch's static HTML read) and can click a button/link by its visible text, or type into a field identified by its label/placeholder/name — for pages that need interaction to show what you need, like a search box, a login form, or a 'load more' button. Only works in the installed desktop app. Returns the resulting page's text. Actions run in order and best-effort — a failed match is reported in the output instead of stopping the whole call.",
+      name: "browse_page", kind: "builtin", risk: "low",
+      description: "Your own browser tab (real Chromium, JavaScript included, signed in wherever the owner is signed in). It stays open between calls, so you can work through many pages step by step: open a url, scroll, or follow a link by passing its URL from the [links] list. Returns the page text plus its [links], [buttons] and [fields]. Leave url empty to keep working on the current page. Read-only — to click, type, or submit, use browse_interact. Only works in the installed desktop app.",
       parameters: {
         type: "object",
         properties: {
-          url: { type: "string" },
+          url: { type: "string", description: "Page to open first. Omit to stay on the current page." },
           actions: {
             type: "array",
             description: "Up to 8 steps, run in order.",
             items: {
               type: "object",
               properties: {
-                type: { type: "string", enum: ["click", "fill", "wait"] },
-                text: { type: "string", description: "click: visible text of the element to click. fill: label/placeholder/name identifying the field." },
-                value: { type: "string", description: "fill: the value to type into the matched field." },
+                type: { type: "string", enum: ["goto", "scroll", "wait"] },
+                url: { type: "string", description: "goto: URL to open." },
                 ms: { type: "number", description: "wait: milliseconds to pause, max 5000." },
               },
               required: ["type"],
             },
           },
         },
-        required: ["url"],
+      },
+    },
+    {
+      name: "browse_interact", kind: "builtin", risk: "medium",
+      description: "Acts in your browser tab (the same one browse_page uses, in the owner's signed-in session): click a button/link by its visible text, type into a field by its label/placeholder/name, press Enter to submit — for search boxes, forms, 'load more' buttons, and multi-step site workflows. Returns the resulting page like browse_page. Leave url empty to act on the current page. Actions run in order and best-effort — a failed match is reported instead of stopping the call.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Page to open first. Omit to act on the current page." },
+          actions: {
+            type: "array",
+            description: "Up to 8 steps, run in order.",
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["goto", "click", "fill", "press_enter", "scroll", "wait"] },
+                text: { type: "string", description: "click: visible text of the element to click. fill: label/placeholder/name identifying the field." },
+                value: { type: "string", description: "fill: the value to type into the matched field." },
+                url: { type: "string", description: "goto: URL to open." },
+                ms: { type: "number", description: "wait: milliseconds to pause, max 5000." },
+              },
+              required: ["type"],
+            },
+          },
+        },
       },
     },
     {
@@ -672,20 +695,29 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
           return { ok: false, output: `fetch failed: ${err instanceof Error ? err.message : String(err)}` };
         }
       }
+      case "browse_page":
       case "browse_interact": {
-        const target = String(args.url ?? "").trim();
-        if (!target) return { ok: false, output: "a url is required" };
+        const target = String(args.url ?? "").trim() || undefined;
         const rawActions = Array.isArray(args.actions) ? args.actions : [];
+        const validTypes = ["goto", "click", "fill", "press_enter", "scroll", "wait"];
         const actions: BrowseAction[] = rawActions
           .filter((a): a is Record<string, unknown> => !!a && typeof a === "object")
           .map((a) => ({
-            type: a.type === "click" || a.type === "fill" || a.type === "wait" ? a.type : "wait",
+            type: (validTypes.includes(String(a.type)) ? a.type : "wait") as BrowseAction["type"],
             text: typeof a.text === "string" ? a.text : undefined,
             value: typeof a.value === "string" ? a.value : undefined,
+            url: typeof a.url === "string" ? a.url : undefined,
             ms: typeof a.ms === "number" ? a.ms : undefined,
           }));
+        // browse_page auto-runs, so it must never be able to click/type/submit
+        // inside the owner's signed-in accounts — enforce that here, not just
+        // in the schema a model might ignore.
+        if (tool.name === "browse_page" && actions.some((a) => !READ_ONLY_ACTIONS.has(a.type))) {
+          return { ok: false, output: "browse_page can only goto/scroll/wait — use browse_interact to click, type, or submit" };
+        }
+        const label = ctx.type === "task" ? `task #${ctx.taskId}` : `agent #${ctx.agentId}`;
         try {
-          const { url, title, text } = await browseInteract(target, actions);
+          const { url, title, text } = await browseInteract(ctxKey(ctx), label, target, actions);
           return { ok: true, output: `${title}\n${url}\n\n${text || "(no readable text content)"}` };
         } catch (err) {
           const message = err instanceof BrowserToolError ? err.message : (err instanceof Error ? err.message : String(err));
@@ -1337,9 +1369,11 @@ export async function runAgentTurn(taskId: number, userMessage: string, imageCre
 }
 
 // How many times AURORA may re-prompt herself to keep working a task after a
-// reply, when auto-continue is on. Bounded so she can't loop forever on an
-// 8GB machine or burn cycles when she's actually stuck.
-const AUTO_CONTINUE_MAX = 6;
+// reply, when auto-continue is on. Raised from 6 for Polar-style long-running
+// work (multi-site research, form runs) — 30 rounds × MAX_STEPS tool calls is
+// hours of work on a 12GB GPU. Still bounded so a stuck loop ends on its own;
+// Stop and the approval gates remain the real circuit breakers.
+const AUTO_CONTINUE_MAX = 30;
 const AUTO_CONTINUE_NUDGE =
   "Continue with this task on your own — don't wait for me. Take the next concrete step now (call whatever tools you need). " +
   "When the task is genuinely, fully complete — or you truly need my input to go further — end your message with the exact token [DONE] and stop.";

@@ -2,26 +2,25 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-// In dev/CLI use, everything lives under ./data relative to the process cwd
-// (the project root). When running packaged inside Electron, main.ts sets
-// AURORA_DATA_DIR to the app's per-user userData folder before the server
-// boots, since a packaged app's cwd isn't a reliable — or writable — place.
-export const DATA_DIR = process.env.AURORA_DATA_DIR ?? path.resolve(process.cwd(), "data");
+// AURORA_HOME is the one root for all runtime data — database, models, media,
+// venvs — so the same install works no matter which drive it's on, and every
+// launch path (dev, launch.cmd, packaged Electron) agrees on one location.
+// Without it, a project checkout's own ./userdata is used if present (matching
+// scripts/launch.cmd), else dev/CLI falls back to ./data under the cwd;
+// Electron's main.ts falls back to its per-user userData folder.
+// AURORA_DATA_DIR / AURORA_DB_DIR / AURORA_DB_PATH still win outright if set.
+const PROJECT_USERDATA = path.resolve(process.cwd(), "userdata");
+export const AURORA_HOME = process.env.AURORA_HOME
+  || (fs.existsSync(PROJECT_USERDATA) ? PROJECT_USERDATA : null);
 
-// The database deliberately does NOT live in DATA_DIR.
-//
-// DATA_DIR is on an external USB enclosure that detaches mid-session (see
-// datadrive.ts). Everything else out there is bulky and replaceable — model
-// checkpoints, generated media, Python venvs — but the database is small (~2MB)
-// and irreplaceable, and losing access to it takes the whole app down: chat,
-// agents, memory, settings. Keeping it on the internal drive means a dropout
-// costs you image generation and the media library while AURORA itself keeps
-// working, instead of everything failing at once.
-//
-// Electron sets AURORA_DB_DIR to its per-user userData folder; the fallback
-// covers dev/CLI runs. AURORA_DB_PATH still wins outright if set.
+export const DATA_DIR = process.env.AURORA_DATA_DIR ?? AURORA_HOME ?? path.resolve(process.cwd(), "data");
+
+// With AURORA_HOME set, the database lives inside it: after the 2026-09-30 PC
+// reset wiped %APPDATA% (and the live DB with it), the system drive proved the
+// *less* durable home. Rolling backups (backup.ts) still go to %APPDATA%, so
+// the DB and its backups sit on different drives and either can be lost alone.
 export const DB_DIR = process.env.AURORA_DB_DIR
-  ?? path.join(os.homedir(), "AppData", "Roaming", "AURORA", "data");
+  ?? (AURORA_HOME ? path.join(AURORA_HOME, "db") : path.join(os.homedir(), "AppData", "Roaming", "AURORA", "data"));
 
 export const DB_PATH = process.env.AURORA_DB_PATH ?? path.join(DB_DIR, "aurora.db");
 
@@ -107,22 +106,18 @@ export const STARTER_SKILLS_DIR = process.env.AURORA_STARTER_SKILLS_DIR ?? path.
 // the bundled resources dir since it sits alongside the app code, not cwd.
 export const STATIC_DIR = process.env.AURORA_STATIC_DIR ?? path.resolve(process.cwd(), "dist/public");
 
-// AURORA isn't publicly distributed — there's no hosted release server to
-// check. It's built and shipped from this one project checkout on this one
-// machine, so "check for updates" means "is there a newer installer sitting
-// in this project's own release/ folder than what's currently running."
-// Overridable in case the project ever moves.
-export const UPDATE_SOURCE_DIR = process.env.AURORA_UPDATE_SOURCE_DIR ?? "C:\\Claude\\AURORA\\release";
+// Where AURORA's own TypeScript source lives, so an agent asked to diagnose or
+// fix a bug in AURORA itself (via read_file/edit_file/run_shell) knows where to
+// actually look, instead of poking at the packaged app.asar it's currently
+// running from. Deliberately NOT wired into a rebuild/restart of the running
+// app — see TOOL_USE_REMINDER in agent-loop.ts for why that stays a manual step.
+// AURORA_SOURCE_DIR (set once per machine) wins; otherwise the cwd, which is
+// the project root for dev/launch.cmd runs. The project has moved drives three
+// times (F: → C: → D:), so this is never hardcoded.
+export const SELF_SOURCE_DIR = process.env.AURORA_SOURCE_DIR ?? process.env.AURORA_SELF_SOURCE_DIR ?? process.cwd();
 
-// Same one-machine assumption as UPDATE_SOURCE_DIR above, one level up — this
-// is where AURORA's own TypeScript source lives, so an agent asked to
-// diagnose or fix a bug in AURORA itself (via read_file/edit_file/run_shell)
-// knows where to actually look, instead of poking at the packaged app.asar
-// it's currently running from. Deliberately NOT wired into a rebuild/restart
-// of the running app — see TOOL_USE_REMINDER in agent-loop.ts for why that
-// stays a manual step.
-// The project now lives on the internal C: drive (moved off the failing F:
-// external, which dropped out repeatedly mid-write). A mirror copy is kept at
-// F:\Claude\AURORA as a backup — see the "sync:f" script in package.json — but
-// C: is the working copy that gets edited and built.
-export const SELF_SOURCE_DIR = process.env.AURORA_SELF_SOURCE_DIR ?? "C:\\Claude\\AURORA";
+// AURORA isn't publicly distributed — there's no hosted release server to
+// check. It's built and shipped from the project checkout above, so "check
+// for updates" means "is there a newer installer sitting in the project's own
+// release/ folder than what's currently running."
+export const UPDATE_SOURCE_DIR = process.env.AURORA_UPDATE_SOURCE_DIR ?? path.join(SELF_SOURCE_DIR, "release");

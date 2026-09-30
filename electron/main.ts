@@ -28,18 +28,15 @@ if (!app.requestSingleInstanceLock()) {
     // writable, place, so point it at Electron's per-user data folder and
     // the app's own bundled resources instead.
     process.env.NODE_ENV = "production";
-    // Owner keeps all data off the system drive: use the F-drive data folder
-    // (matching scripts/launch.cmd) if it exists, else fall back to Electron's
-    // per-user folder. An explicit AURORA_DATA_DIR env still wins over both.
-    const F_DATA_DIR = "F:\\Claude\\AURORA\\userdata";
-    process.env.AURORA_DATA_DIR =
-      process.env.AURORA_DATA_DIR ??
-      (fs.existsSync(F_DATA_DIR) ? F_DATA_DIR : path.join(app.getPath("userData"), "data"));
+    // Owner keeps all data off the system drive via AURORA_HOME (a per-machine
+    // user env var — see server/paths.ts). Without it, fall back to Electron's
+    // per-user folder. Explicit AURORA_DATA_DIR / AURORA_DB_DIR still win.
+    const home = process.env.AURORA_HOME || null;
+    const fallbackDir = path.join(app.getPath("userData"), "data");
+    process.env.AURORA_DATA_DIR = process.env.AURORA_DATA_DIR ?? home ?? fallbackDir;
+    process.env.AURORA_DB_DIR = process.env.AURORA_DB_DIR ?? (home ? path.join(home, "db") : fallbackDir);
     process.env.HF_HOME = process.env.HF_HOME ?? path.join(process.env.AURORA_DATA_DIR, "hf-cache");
-    // The database stays on the internal drive even when AURORA_DATA_DIR points
-    // at the external one — it's small and irreplaceable, and keeping it local
-    // means the app survives that enclosure detaching. See paths.ts.
-    process.env.AURORA_DB_DIR = process.env.AURORA_DB_DIR ?? path.join(app.getPath("userData"), "data");
+    fs.mkdirSync(process.env.AURORA_DB_DIR, { recursive: true });
     process.env.AURORA_STATIC_DIR = path.resolve(__dirname, "../public");
     // "starter-skills" ships from the project root (not a build output), so
     // it's two levels up from dist/electron — one level would land in dist/

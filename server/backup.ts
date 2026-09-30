@@ -22,7 +22,9 @@ import type DatabaseType from "better-sqlite3";
 import { log } from "./app";
 
 // Deliberately NOT derived from DATA_DIR — the whole point is to land on a
-// drive that isn't the one that keeps disappearing.
+// different drive than the database. With AURORA_HOME on D:, the DB lives on
+// D: and these land on C:, so either drive can be lost (or wiped by a Windows
+// reset, as happened 2026-09-30) without losing both.
 export const BACKUP_DIR = process.env.AURORA_BACKUP_DIR
   ?? path.join(os.homedir(), "AppData", "Roaming", "AURORA", "backups");
 

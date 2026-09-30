@@ -121,6 +121,38 @@ export function salvageTextToolCalls(message: OllamaMessage | undefined, knownTo
   return { ...message, content: "", tool_calls: calls };
 }
 
+/**
+ * Cleans a final text reply of tool-call JSON the model wrote as prose
+ * instead of calling — e.g. `Here's my response: {"name": "generate_image",
+ * "parameters": {"prompt": "a prompt for the image description"}}` or
+ * `{"name": "None"}`. salvageTextToolCalls only converts replies that are
+ * *entirely* call JSON; anything left over mid-sentence is never a real
+ * action, so showing it to the owner is just noise. Only objects shaped like
+ * a call (a string "name" plus parameters/arguments, or the literal "None"
+ * non-call) are removed, along with the "here's my JSON response:" lead-in
+ * that introduces them — a reply that merely discusses JSON is left alone.
+ */
+export function stripStrayToolJson(text: string): string {
+  let out = text;
+  let removed = false;
+  const re = /\{\s*"name"\s*:\s*"[^"]*"(?:[^{}]|\{[^{}]*\})*\}/g;
+  out = out.replace(re, (block) => {
+    try {
+      const parsed = JSON.parse(block);
+      const isCall = typeof parsed?.name === "string"
+        && (parsed.name === "None" || typeof parsed.parameters === "object" || typeof parsed.arguments === "object");
+      if (!isCall) return block;
+      removed = true;
+      return "";
+    } catch {
+      return block;
+    }
+  });
+  if (!removed) return text;
+  out = out.replace(/^.*\b(?:json )?(?:response|function call)\b[^\n]*:\s*$/gim, "");
+  return out.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export async function chat(host: string, model: string, messages: OllamaMessage[], tools: OllamaToolDef[], numCtx: number = NUM_CTX): Promise<OllamaChatResult> {
   const body = JSON.stringify({ model, messages, tools: tools.length ? tools : undefined, stream: false, options: { num_ctx: numCtx } });
   // On a single 8GB GPU, a burst of agent ticks can momentarily overwhelm

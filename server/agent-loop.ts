@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getStorage } from "./storage";
-import { chat, analyzeImage, unloadAllModels, listModels, type OllamaMessage, type OllamaToolDef } from "./ollama";
+import { chat, analyzeImage, unloadAllModels, listModels, stripStrayToolJson, type OllamaMessage, type OllamaToolDef } from "./ollama";
 import { executeCommand, type ExecResult } from "./shell-exec";
 import { runSkillTool } from "./skills/runner";
 import { generateImage } from "./imagegen";
@@ -135,6 +135,8 @@ export interface TurnResult {
   status: "final" | "awaiting_approval" | "error";
   reply: string;
   approvalId?: number;
+  /** True if this turn actually called at least one tool — i.e. it was working, not just talking. Gates auto-continue. */
+  usedTools?: boolean;
 }
 
 interface ToolDef {
@@ -1255,9 +1257,9 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
   const calls = assistantMsg.tool_calls ?? [];
 
   if (calls.length === 0) {
-    const reply = assistantMsg.content || summarizeTranscript(transcript) || "(no response)";
+    const reply = stripStrayToolJson(assistantMsg.content ?? "") || summarizeTranscript(transcript) || "(no response)";
     await updateMessage(ctx, messageId, reply, transcript.length ? JSON.stringify(transcript) : null, thinking);
-    return { status: "final", reply };
+    return { status: "final", reply, usedTools: transcript.length > 0 };
   }
 
   messages.push({ role: "assistant", content: assistantMsg.content ?? "", tool_calls: calls });
@@ -1394,9 +1396,13 @@ async function runTaskTurnLoop(ctx: RunContext, taskId: number, config: AgentCon
   await finalizeContext(ctx, result.status);
 
   let n = 0;
+  // Only keep going while she's actually working: a turn that called no tools
+  // is conversation (or a finished job), and nudging it just makes a small
+  // local model invent busywork — "I'm on it!", placeholder tool-call JSON.
   while (
     config.autoContinue &&
     result.status === "final" &&
+    result.usedTools &&
     !!result.reply &&
     n < AUTO_CONTINUE_MAX &&
     !/\[DONE\]/i.test(result.reply) &&

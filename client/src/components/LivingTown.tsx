@@ -4,6 +4,8 @@ import { Link } from "wouter";
 import { getToken } from "@/lib/queryClient";
 import { IdentityAvatar } from "@/components/ui/Avatar";
 import { X } from "lucide-react";
+import { AgentProfile } from "@/components/AgentProfile";
+import { moodFace } from "@/lib/mood";
 import { VENUES, WEEKDAYS, agentSeed, routineAt, townDayNumber, townHour, type VenueId } from "@shared/town";
 
 // A living pixel-art town: every agent is a little character who commutes to
@@ -18,7 +20,8 @@ import { VENUES, WEEKDAYS, agentSeed, routineAt, townDayNumber, townHour, type V
 interface TeamMember {
   id: number; name: string; role: string | null; isOverseer: boolean; status: "active" | "paused"; avatarPath: string | null;
   companyId: number | null; working: boolean; waitingApproval: boolean; currentTask: string | null; lastTools: string[];
-  mood: string; lastActivity: { text: string; at: number } | null;
+  mood: string; lastActivity: { text: string; at: number } | null; morale: number; energy: number;
+  relationships?: { otherAgentId: number; sentiment: number; interactions: number }[];
 }
 interface Chatter { agentIds: [number, number]; lines: { agentId: number; text: string }[]; at: number; venue?: VenueId }
 interface TeamData { members: TeamMember[]; chatter: Chatter[] }
@@ -902,20 +905,11 @@ export function LivingTown({ className, height, preview = false }: { className?:
           </div>
         )}
         {selMember && (
-          <div className={`absolute left-3 top-3 w-72 p-3 ${PANEL}`} style={{ fontFamily: PIXEL_FONT }}>
-            <div className="flex items-start gap-3">
-              <div className="rounded border-4 border-[#5a3a22] bg-[#c9e3f0]"><IdentityAvatar name={selMember.name} avatarPath={selMember.avatarPath} className="h-16 w-16 rounded-none" /></div>
-              <div className="min-w-0 flex-1">
-                <div className="text-base font-semibold leading-tight">{selMember.name}</div>
-                <div className="text-xs opacity-80">{selMember.isOverseer ? "Lead of everything" : selMember.role}</div>
-                <div className="text-xs opacity-80">{selCompany?.name ?? "AURORA HQ"}</div>
-                <div className="mt-1 text-xs">{selDoing}</div>
-              </div>
-              <button type="button" onClick={() => setSelected(null)} className="opacity-60 hover:opacity-100" title="Close"><X size={15} /></button>
-            </div>
-            {selMember.working && selMember.currentTask && <p className="mt-2 line-clamp-3 text-xs opacity-80">On: {selMember.currentTask.replace(/^\[[^\]]*\]:?\s*/, "")}</p>}
-            {!selMember.working && selMember.lastActivity && <p className="mt-2 line-clamp-3 text-xs opacity-80">Last: {selMember.lastActivity.text}</p>}
-            <Link href="/team" className="mt-2 inline-block text-xs font-semibold underline">Open in Team →</Link>
+          <div className={`absolute left-3 top-3 max-h-[calc(100%-24px)] w-80 overflow-y-auto p-3 ${PANEL}`} style={{ fontFamily: PIXEL_FONT }}>
+            <div className="mb-1 flex justify-end"><button type="button" onClick={() => setSelected(null)} className="opacity-60 hover:opacity-100" title="Close"><X size={15} /></button></div>
+            <AgentProfile pixel m={selMember} members={team?.members ?? []} companyName={selCompany?.name ?? "AURORA HQ"} doing={selDoing}
+              onPick={(id) => { setSelected(id); if (cam.current.zoom < 3) cam.current.zoom = 3; }} />
+            <Link href="/team" className="mt-3 inline-block text-xs font-semibold underline">Open in Team →</Link>
           </div>
         )}
       </div>
@@ -947,7 +941,7 @@ function CastPanel({ members, companies, selected, height, onPick }: { members: 
           </div>
           <div className="mt-2 text-center text-lg font-semibold leading-tight">✦ {lead.name} ✦</div>
           <div className="text-center text-xs opacity-80">Lead of everything · AURORA HQ</div>
-          <div className="mt-1 rounded bg-[#fff1cf] px-2 py-1 text-center text-xs">{statusOf(lead)}</div>
+          <div className="mt-1 rounded bg-[#fff1cf] px-2 py-1 text-center text-xs">{statusOf(lead)} · {moodFace(lead.morale, lead.energy)} {lead.mood}</div>
           {lead.working && lead.currentTask && <p className="mt-1 line-clamp-2 text-center text-[11px] opacity-75">{lead.currentTask.replace(/^[[^]]*]:?s*/, "")}</p>}
         </button>
       )}
@@ -959,6 +953,7 @@ ${statusOf(m)}`}
             className={`rounded-md border-[3px] p-0.5 text-center transition ${selected === m.id ? "border-[#3a2212] bg-[#fff1cf]" : "border-[#c99a5a] hover:border-[#3a2212]"}`}>
             <div className="relative">
               <IdentityAvatar name={m.name} avatarPath={m.avatarPath} className={`aspect-square h-auto w-full rounded ${m.status === "paused" ? "opacity-60 grayscale" : ""}`} />
+              <span className="absolute -bottom-1 -left-1 rounded-full bg-[#fff1cf] px-0.5 text-xs leading-tight shadow" title={`${m.mood} · morale ${m.morale} · energy ${m.energy}`}>{moodFace(m.morale, m.energy)}</span>
               {(m.working || m.waitingApproval) && <span className={`absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full border border-white ${m.waitingApproval ? "bg-amber-400" : "bg-emerald-400"}`} />}
             </div>
             <div className="mt-0.5 truncate text-[11px] font-semibold leading-tight">{m.name.split(" ")[0]}</div>

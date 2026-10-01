@@ -1,5 +1,6 @@
 import { IdentityAvatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
+import { moodFace } from "@/lib/mood";
 import { Building2, Crown, TrendingDown, TrendingUp, Newspaper } from "lucide-react";
 
 // The whole organization at a glance: AURORA HQ on top, the real companies
@@ -13,6 +14,7 @@ export interface TownCompany {
   cash: number; reputation: number; revenueLast: number; product: string; staff: StaffMember[];
 }
 export interface TownEvent { id: number; at: number; companyId: number | null; kind: string; text: string }
+export type Feelings = Map<number, { mood: string; morale: number; energy: number }>;
 export interface TownData { simDay: number; companies: TownCompany[]; hq: StaffMember[]; events: TownEvent[] }
 
 const EVENT_ICON: Record<string, string> = {
@@ -53,7 +55,19 @@ function Windows({ total, lit, hue }: { total: number; lit: number; hue: number 
   );
 }
 
-function RealBuilding({ c, onOpen }: { c: TownCompany; onOpen: () => void }) {
+/** A staff member's detailed portrait with a mood face and status ring. */
+function Face({ s, feel, size, onPick }: { s: StaffMember; feel?: { mood: string; morale: number; energy: number }; size: string; onPick?: (id: number) => void }) {
+  return (
+    <span role="button" tabIndex={0} onClick={(e) => { if (onPick) { e.stopPropagation(); onPick(s.id); } }}
+      className={cn("relative inline-block rounded-xl p-[2px]", s.working ? "bg-primary shadow-[0_0_12px] shadow-primary/60" : "bg-border")}
+      title={`${s.name} — ${s.role ?? "agent"}${feel ? ` · ${feel.mood} · morale ${feel.morale} · energy ${feel.energy}` : ""}`}>
+      <IdentityAvatar name={s.name} avatarPath={s.avatarPath} className={cn(size, "rounded-[10px] text-sm", s.status === "paused" && "grayscale opacity-60")} />
+      {feel && <span className="absolute -bottom-1 -right-1 rounded-full bg-card px-0.5 text-xs leading-tight shadow">{moodFace(feel.morale, feel.energy)}</span>}
+    </span>
+  );
+}
+
+function RealBuilding({ c, onOpen, feelings, onPick }: { c: TownCompany; onOpen: () => void; feelings?: Feelings; onPick?: (id: number) => void }) {
   const working = c.staff.filter((s) => s.working).length;
   const lead = c.staff.find((s) => s.isLead);
   return (
@@ -68,10 +82,11 @@ function RealBuilding({ c, onOpen }: { c: TownCompany; onOpen: () => void }) {
           {working > 0 && <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">{working} working</span>}
         </div>
         <Windows total={c.staff.length} lit={working} hue={c.color} />
-        <div className="flex -space-x-2">
-          {c.staff.slice(0, 8).map((s) => (
-            <div key={s.id} className={cn("rounded-full ring-2 ring-card", s.working && "ring-primary")} title={`${s.name} — ${s.role ?? "agent"}`}>
-              <IdentityAvatar name={s.name} avatarPath={s.avatarPath} className={cn("h-7 w-7 text-[10px]", s.status === "paused" && "grayscale opacity-60")} />
+        <div className="flex flex-wrap gap-2">
+          {c.staff.map((s) => (
+            <div key={s.id} className="flex w-14 flex-col items-center">
+              <Face s={s} feel={feelings?.get(s.id)} size="h-14 w-14" onPick={onPick} />
+              <span className="mt-1 w-full truncate text-center text-[10px] text-muted-foreground">{s.name.split(" ")[0]}</span>
             </div>
           ))}
         </div>
@@ -116,9 +131,12 @@ function SimBuilding({ c, selected, onSelect }: { c: TownCompany; selected: bool
   );
 }
 
-export function TownMap({ data, selectedSimId, onOpenCompany, onSelectSim }: {
+export function TownMap({ data, selectedSimId, onOpenCompany, onSelectSim, feelings, onPickAgent }: {
   data: TownData; selectedSimId: number | null; onOpenCompany: (id: number | "hq") => void; onSelectSim: (id: number) => void;
+  feelings?: Feelings; onPickAgent?: (id: number) => void;
 }) {
+  const aurora = data.hq.find((s) => s.isLead);
+  const hqCrew = data.hq.filter((s) => s !== aurora);
   const real = data.companies.filter((c) => c.kind === "real");
   const sims = data.companies.filter((c) => c.kind === "simulated");
   const nameOf = new Map(data.companies.map((c) => [c.id, c.name] as const));
@@ -130,20 +148,30 @@ export function TownMap({ data, selectedSimId, onOpenCompany, onSelectSim }: {
         style={{ backgroundImage: "linear-gradient(hsl(var(--border)/0.35) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border)/0.35) 1px, transparent 1px)", backgroundSize: "28px 28px" }}>
         {/* HQ */}
         <div className="flex justify-center">
-          <button type="button" onClick={() => onOpenCompany("hq")} className="group w-full max-w-md text-left focus:outline-none">
+          <button type="button" onClick={() => onOpenCompany("hq")} className="group w-full max-w-3xl text-left focus:outline-none">
             <div className="h-2.5 rounded-t-xl bg-gradient-to-r from-primary to-accent" />
-            <div className="flex items-center gap-3 rounded-b-xl border border-t-0 border-primary/40 bg-card/90 p-3 shadow-glow transition-colors group-hover:bg-card">
-              <Crown size={18} className="shrink-0 text-accent" />
-              <div className="flex-1">
-                <div className="text-sm font-semibold">AURORA HQ</div>
+            <div className="flex flex-wrap items-center gap-5 rounded-b-xl border border-t-0 border-primary/40 bg-card/90 p-4 shadow-glow transition-colors group-hover:bg-card">
+              {aurora && (
+                <div className="flex flex-col items-center">
+                  <span role="button" tabIndex={0} onClick={(e) => { if (onPickAgent) { e.stopPropagation(); onPickAgent(aurora.id); } }}
+                    className="relative rounded-2xl bg-[#f2c14e] p-1 shadow-[0_0_30px_rgba(242,193,78,0.55)]" title={`${aurora.name} — lead of everything`}>
+                    <IdentityAvatar name={aurora.name} avatarPath={aurora.avatarPath} className="h-32 w-32 rounded-xl text-2xl" />
+                    {feelings?.get(aurora.id) && <span className="absolute -bottom-1.5 -right-1.5 rounded-full bg-card px-1 text-lg leading-tight shadow">{moodFace(feelings.get(aurora.id)!.morale, feelings.get(aurora.id)!.energy)}</span>}
+                  </span>
+                  <span className="mt-1.5 text-sm font-semibold">✦ {aurora.name} ✦</span>
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2"><Crown size={18} className="shrink-0 text-accent" /><span className="text-base font-semibold">AURORA HQ</span></div>
                 <div className="text-[11px] text-muted-foreground">Runs every company · sim day {data.simDay}{hqWorking ? ` · ${hqWorking} working` : ""}</div>
-              </div>
-              <div className="flex -space-x-2">
-                {data.hq.map((s) => (
-                  <div key={s.id} className={cn("rounded-full ring-2 ring-card", s.working && "ring-primary")} title={`${s.name} — ${s.role ?? ""}`}>
-                    <IdentityAvatar name={s.name} avatarPath={s.avatarPath} className={cn(s.isLead ? "h-10 w-10" : "h-8 w-8", "text-[10px]")} />
-                  </div>
-                ))}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {hqCrew.map((s) => (
+                    <div key={s.id} className="flex w-14 flex-col items-center">
+                      <Face s={s} feel={feelings?.get(s.id)} size="h-14 w-14" onPick={onPickAgent} />
+                      <span className="mt-1 w-full truncate text-center text-[10px] text-muted-foreground">{s.name.split(" ")[0]}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </button>
@@ -152,8 +180,8 @@ export function TownMap({ data, selectedSimId, onOpenCompany, onSelectSim }: {
         {/* Main street: real companies */}
         <div>
           <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground"><Building2 size={12} /> AURORA companies</div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-            {real.map((c) => <RealBuilding key={c.id} c={c} onOpen={() => onOpenCompany(c.id)} />)}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {real.map((c) => <RealBuilding key={c.id} c={c} onOpen={() => onOpenCompany(c.id)} feelings={feelings} onPick={onPickAgent} />)}
           </div>
         </div>
 

@@ -8,6 +8,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { TeamWorld, type Handoff, type PipelineFlow, type Chatter } from "@/components/TeamWorld";
 import { TownMap, type TownData } from "@/components/TownMap";
+import { AgentProfile } from "@/components/AgentProfile";
+import { moodFace } from "@/lib/mood";
 import { Play, Pause, X, ShieldAlert, Wrench } from "lucide-react";
 
 interface Member {
@@ -61,19 +63,8 @@ function ago(ts: number | null): string {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-function Meter({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-      <span className="w-9">{label}</span>
-      <div className="h-1 flex-1 rounded-full bg-muted overflow-hidden">
-        <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </div>
-    </div>
-  );
-}
-
 // Literal class strings so Tailwind's scanner picks them up.
-const AVATAR_SIZE = { 64: "h-16 w-16", 88: "h-[88px] w-[88px]", 112: "h-28 w-28" } as const;
+const AVATAR_SIZE = { 64: "h-16 w-16", 88: "h-[88px] w-[88px]", 112: "h-28 w-28", 160: "h-40 w-40" } as const;
 
 /** One agent on the floor: avatar with a state ring, name, and a speech bubble of what they last said/did. */
 function Node({ m, size, selected, onSelect }: { m: Member; size: keyof typeof AVATAR_SIZE; selected: boolean; onSelect: () => void }) {
@@ -104,6 +95,7 @@ function Node({ m, size, selected, onSelect }: { m: Member; size: keyof typeof A
         }}
       >
         <IdentityAvatar name={m.name} avatarPath={m.avatarPath} className={cn(AVATAR_SIZE[size], "text-lg", st === "paused" && "grayscale opacity-60")} />
+        <span className="absolute -bottom-1 -right-1 rounded-full bg-card px-1 text-base leading-tight shadow" title={`Mood: ${m.mood} · morale ${m.morale} · energy ${m.energy}`}>{moodFace(m.morale, m.energy)}</span>
         {st === "approval" && (
           <span className="absolute -right-1 -top-1 rounded-full bg-[hsl(var(--risk-medium))] p-1 text-black"><ShieldAlert size={11} /></span>
         )}
@@ -150,7 +142,7 @@ export default function Team() {
   // too cramped, so the floor falls back to a simple grid.
   const ring = stage.w >= 760;
   const cx = stage.w / 2, cy = stage.h / 2;
-  const rx = stage.w / 2 - 110, ry = stage.h / 2 - 95;
+  const rx = stage.w / 2 - 120, ry = stage.h / 2 - 110;
   const positions = crew.map((_, i) => {
     const angle = -Math.PI / 2 + (i / Math.max(1, crew.length)) * Math.PI * 2;
     return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
@@ -204,7 +196,7 @@ export default function Team() {
         <div ref={stageRef} className="relative min-h-0 flex-1 overflow-auto">
           {view === "town" && town ? (
             <div className="p-4 sm:p-6">
-              <TownMap data={town} selectedSimId={selectedSim} onOpenCompany={(id) => { setOffice(id); setView("world"); }} onSelectSim={(id) => setSelectedSim(id === selectedSim ? null : id)} />
+              <TownMap data={town} feelings={new Map(members.map((m) => [m.id, { mood: m.mood, morale: m.morale, energy: m.energy }]))} onPickAgent={(id) => { setSelectedSim(null); setSelectedId(id); }} selectedSimId={selectedSim} onOpenCompany={(id) => { setOffice(id); setView("world"); }} onSelectSim={(id) => setSelectedSim(id === selectedSim ? null : id)} />
             </div>
           ) : members.length > 0 && view === "world" ? (
             <div className="space-y-3 p-4 sm:p-6">
@@ -247,12 +239,12 @@ export default function Team() {
               </svg>
               {lead && (
                 <div className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: cx, top: cy }}>
-                  <Node m={lead} size={112} selected={selectedId === lead.id} onSelect={() => setSelectedId(lead.id)} />
+                  <Node m={lead} size={160} selected={selectedId === lead.id} onSelect={() => setSelectedId(lead.id)} />
                 </div>
               )}
               {crew.map((m, i) => (
                 <div key={m.id} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: positions[i].x, top: positions[i].y }}>
-                  <Node m={m} size={64} selected={selectedId === m.id} onSelect={() => setSelectedId(m.id)} />
+                  <Node m={m} size={88} selected={selectedId === m.id} onSelect={() => setSelectedId(m.id)} />
                 </div>
               ))}
             </>
@@ -260,7 +252,7 @@ export default function Team() {
             <div className="grid grid-cols-2 gap-6 p-6 sm:grid-cols-3">
               {[...(lead ? [lead] : []), ...crew].map((m) => (
                 <div key={m.id} className="flex justify-center">
-                  <Node m={m} size={m.isOverseer ? 88 : 64} selected={selectedId === m.id} onSelect={() => setSelectedId(m.id)} />
+                  <Node m={m} size={m.isOverseer ? 160 : 88} selected={selectedId === m.id} onSelect={() => setSelectedId(m.id)} />
                 </div>
               ))}
             </div>
@@ -304,31 +296,17 @@ export default function Team() {
         })()}
 
         {selected && (
-          <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-card/60 p-4 backdrop-blur animate-in">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <div>
-                  <IdentityAvatar name={selected.name} avatarPath={selected.avatarPath} className="h-12 w-12" />
-                </div>
-                <div>
-                  <div className="font-semibold">{selected.name}</div>
-                  <div className="text-xs text-muted-foreground">{selected.isOverseer ? "Lead · Overseer" : selected.role ?? "Agent"} · {STATE_LABEL[stateOf(selected)]}</div>
-                </div>
-              </div>
+          <aside className="w-96 shrink-0 overflow-y-auto border-l border-border bg-card/60 p-4 backdrop-blur animate-in">
+            <div className="mb-2 flex justify-end">
               <button type="button" className="opacity-60 hover:opacity-100" onClick={() => setSelectedId(null)} title="Close"><X size={16} /></button>
             </div>
+            <AgentProfile m={selected} members={members} onPick={setSelectedId}
+              companyName={selected.companyId == null ? "AURORA HQ" : town?.companies.find((c) => c.id === selected.companyId)?.name} />
 
-            <div className="mt-4 space-y-1.5">
-              <Meter label="Energy" value={selected.energy} />
-              <Meter label="Morale" value={selected.morale} />
-              <div className="text-[11px] text-muted-foreground">Mood: {selected.mood}</div>
-            </div>
-
-            <dl className="mt-4 space-y-2 text-xs">
+            <dl className="mt-4 space-y-2 border-t border-border pt-3 text-xs">
               <div><dt className="text-muted-foreground">Last active</dt><dd>{ago(selected.lastRunAt)}</dd></div>
               <div><dt className="text-muted-foreground">Schedule</dt><dd>{selected.scheduleMinutes ? `every ${selected.scheduleMinutes} min` : "whenever there's work"}</dd></div>
               <div><dt className="text-muted-foreground">Queue</dt><dd>{selected.pendingCount} pending</dd></div>
-              {selected.currentTask && <div><dt className="text-muted-foreground">Working on</dt><dd>{selected.currentTask}</dd></div>}
               {selected.lastTools.length > 0 && (
                 <div>
                   <dt className="text-muted-foreground">Recent tools</dt>
@@ -338,9 +316,6 @@ export default function Team() {
                     ))}
                   </dd>
                 </div>
-              )}
-              {selected.lastActivity && (
-                <div><dt className="text-muted-foreground">Latest ({ago(selected.lastActivity.at)})</dt><dd className="whitespace-pre-wrap">{selected.lastActivity.text}</dd></div>
               )}
             </dl>
 

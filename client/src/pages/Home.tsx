@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LivingTown } from "@/components/LivingTown";
 import { Card } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Input";
 import { RiskBadge, StatusBadge } from "@/components/ui/Badge";
@@ -300,6 +301,7 @@ export default function Home() {
     <div className="p-8 max-w-6xl mx-auto overflow-y-auto h-screen space-y-6">
       <PageHeader title={`${greeting()}.`} description="What's happening across your vessel right now." />
       <PulseStrip />
+      <LivingTown />
       <HomeComposer />
 
       {overseer && (

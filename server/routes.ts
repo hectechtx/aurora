@@ -547,15 +547,17 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
     // AURORA the overseer has a fixed look the owner chose (2026-09-30): an
     // original stylized-3D character — long wavy black hair, warm tan skin,
     // black floral top, silver necklace — so regenerating keeps her
-    // recognizably herself. Everyone else keeps the character-select style.
+    // recognizably herself. Everyone else gets the same semi-realistic 3D
+    // style the owner picked for her (2026-10-01), so the whole cast matches.
     const prompt = agent.isOverseer
       ? "Stylized realistic 3D character render, head and shoulders portrait of AURORA, an original young woman AI character in her mid 20s. " +
         "Long wavy jet-black hair with a center part, warm tan skin, warm brown eyes, softly defined dark eyebrows, natural full lips with a soft nude-pink tone, " +
         "delicate thin silver pendant necklace, fitted black short-sleeve top with a subtle tonal black floral pattern. Calm, confident, slightly playful gaze at the camera. " +
         "Soft even studio lighting, plain neutral gray backdrop, high detail, clean modern 3D character art."
-      : `Stylized character portrait avatar of "${agent.name}", a personal AI assistant character. ` +
-        `Role: ${agent.jobDescription.slice(0, 300)}. Personality: ${agent.persona.slice(0, 300)}. ` +
-        "Simple clean background, friendly expression, headshot framing, video game character select screen art, vibrant colors, high quality.";
+      : `Stylized realistic 3D character render, head and shoulders portrait of an original character named "${agent.name.trim()}". ` +
+        `Role: ${agent.jobDescription.slice(0, 220)}. Personality: ${agent.persona.slice(0, 220)}. ` +
+        "Distinctive hairstyle and outfit that fit the role, calm natural expression. Soft even studio lighting, plain neutral gray backdrop, high detail, " +
+        "clean modern 3D character art, semi-realistic skin and finely detailed hair.";
     try {
       const { pngBuffer } = await generateImage(config.imageGenHost, prompt, config.ollamaHost);
       const filename = `avatar-${id}-${randomUUID()}.png`;

@@ -85,13 +85,13 @@ export interface GeneratedImage {
  * heads and limbs), so the resolution follows the checkpoint rather than
  * being one fixed number for both.
  */
-function buildWorkflow(prompt: string, ckpt: string, seed: number) {
+function buildWorkflow(prompt: string, ckpt: string, seed: number, init?: { image: string; denoise: number }, negative?: string) {
   const isXl = /xl/i.test(ckpt);
   const size = isXl ? 1024 : 512;
-  return {
+  const graph: Record<string, { class_type: string; inputs: Record<string, unknown> }> = {
     "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: ckpt } },
     "2": { class_type: "CLIPTextEncode", inputs: { text: prompt, clip: ["1", 1] } },
-    "3": { class_type: "CLIPTextEncode", inputs: { text: "lowres, blurry, watermark, text, deformed", clip: ["1", 1] } },
+    "3": { class_type: "CLIPTextEncode", inputs: { text: negative ?? "lowres, blurry, watermark, text, deformed", clip: ["1", 1] } },
     "4": { class_type: "EmptyLatentImage", inputs: { width: size, height: size, batch_size: 1 } },
     "5": {
       class_type: "KSampler",
@@ -103,6 +103,23 @@ function buildWorkflow(prompt: string, ckpt: string, seed: number) {
     "6": { class_type: "VAEDecode", inputs: { samples: ["5", 0], vae: ["1", 2] } },
     "7": { class_type: "SaveImage", inputs: { filename_prefix: "aurora", images: ["6", 0] } },
   };
+  if (init) {
+    // image-to-image: start from an existing picture instead of noise, so a
+    // restyle keeps the subject's look (hair, colours, pose).
+    graph["8"] = { class_type: "LoadImage", inputs: { image: init.image } };
+    graph["9"] = { class_type: "ImageScale", inputs: { image: ["8", 0], upscale_method: "lanczos", width: size, height: size, crop: "center" } };
+    graph["4"] = { class_type: "VAEEncode", inputs: { pixels: ["9", 0], vae: ["1", 2] } };
+    graph["5"].inputs.denoise = init.denoise;
+  }
+  return graph;
+}
+
+export interface ImageOptions {
+  /** Start from this picture (image-to-image). */
+  initImage?: Buffer;
+  /** How far to move from the start picture, 0-1 (default 0.6). */
+  denoise?: number;
+  negative?: string;
 }
 
 /**
@@ -115,7 +132,7 @@ function buildWorkflow(prompt: string, ckpt: string, seed: number) {
  * one of the reasons image calls looked "randomly" broken. Best-effort — a
  * failed unload shouldn't block the attempt.
  */
-export async function generateImage(host: string, prompt: string, ollamaHost?: string): Promise<GeneratedImage> {
+export async function generateImage(host: string, prompt: string, ollamaHost?: string, opts: ImageOptions = {}): Promise<GeneratedImage> {
   if (ollamaHost) {
     try {
       const { unloadAllModels } = await import("./ollama");
@@ -133,11 +150,19 @@ export async function generateImage(host: string, prompt: string, ollamaHost?: s
   // seconds where SDXL takes the better part of a minute.
   const ckpt = checkpoints.find((c) => !/xl/i.test(c)) ?? checkpoints[0];
   const seed = Math.floor(Math.random() * 2 ** 31);
+  let init: { image: string; denoise: number } | undefined;
+  if (opts.initImage) {
+    const form = new FormData();
+    form.append("image", new Blob([new Uint8Array(opts.initImage)], { type: "image/png" }), `aurora-init-${Date.now()}.png`);
+    form.append("overwrite", "true");
+    const up = await fetchJson(`${host}/upload/image`, { method: "POST", body: form }, 30_000);
+    init = { image: up.subfolder ? `${up.subfolder}/${up.name}` : up.name, denoise: opts.denoise ?? 0.6 };
+  }
 
   const queued = await fetchJson(`${host}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: buildWorkflow(prompt, ckpt, seed) }),
+    body: JSON.stringify({ prompt: buildWorkflow(prompt, ckpt, seed, init, opts.negative) }),
   }, 30_000);
 
   const promptId: string | undefined = queued?.prompt_id;

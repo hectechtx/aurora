@@ -539,13 +539,15 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
     if (!agent) return res.status(404).json({ message: "Agent not found." });
     const config = await storage().getConfig();
     if (!config.imageGenHost) return res.status(400).json({ message: "Set up local image generation in Settings first." });
-    // AURORA the overseer gets a photorealistic human portrait — the owner
-    // wants her to feel alive and present, not a game-art avatar like the
-    // worker agents. Everyone else keeps the character-select style.
+    // AURORA the overseer has a fixed look the owner chose (2026-09-30): an
+    // original stylized-3D character — long wavy black hair, warm tan skin,
+    // black floral top, silver necklace — so regenerating keeps her
+    // recognizably herself. Everyone else keeps the character-select style.
     const prompt = agent.isOverseer
-      ? "Photorealistic portrait headshot of a calm, intelligent woman with dark hair, warm and attentive expression, " +
-        "soft studio lighting, subtle teal and violet rim light, looking directly at the camera, shallow depth of field, " +
-        "cinematic, ultra detailed, natural skin texture, 85mm lens, high quality. She is AURORA, a personal AI overseer."
+      ? "Stylized realistic 3D character render, head and shoulders portrait of AURORA, an original young woman AI character in her mid 20s. " +
+        "Long wavy jet-black hair with a center part, warm tan skin, warm brown eyes, softly defined dark eyebrows, natural full lips with a soft nude-pink tone, " +
+        "delicate thin silver pendant necklace, fitted black short-sleeve top with a subtle tonal black floral pattern. Calm, confident, slightly playful gaze at the camera. " +
+        "Soft even studio lighting, plain neutral gray backdrop, high detail, clean modern 3D character art."
       : `Stylized character portrait avatar of "${agent.name}", a personal AI assistant character. ` +
         `Role: ${agent.jobDescription.slice(0, 300)}. Personality: ${agent.persona.slice(0, 300)}. ` +
         "Simple clean background, friendly expression, headshot framing, video game character select screen art, vibrant colors, high quality.";

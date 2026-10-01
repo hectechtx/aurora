@@ -7,6 +7,12 @@ export interface ProfileMember {
   mood: string; energy: number; morale: number; working: boolean; waitingApproval: boolean; currentTask: string | null;
   lastActivity: { text: string; at: number } | null; companyId: number | null;
   relationships?: { otherAgentId: number; sentiment: number; interactions: number }[];
+  thoughts?: { kind: "thought" | "memory" | "gossip"; text: string; at: number }[];
+}
+
+function ago(ts: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  return s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 86400 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`;
 }
 
 function Bar({ label, value, color, pixel }: { label: string; value: number; color: string; pixel?: boolean }) {
@@ -78,6 +84,21 @@ export function AgentProfile({ m, members, companyName, doing, pixel, onPick }: 
           </ul>
         )}
       </div>
+
+      {!!m.thoughts?.length && (
+        <div>
+          <div className="mb-1.5 text-xs font-semibold">Inner life</div>
+          <ul className="space-y-1.5">
+            {m.thoughts.map((t, i) => (
+              <li key={i} className={cn("rounded-lg px-2.5 py-1.5 text-xs leading-snug", pixel ? "bg-[#fff1cf]" : "bg-surface border border-border")}>
+                <span className="mr-1">{t.kind === "thought" ? "💭" : t.kind === "gossip" ? "🗣️" : "🫶"}</span>
+                {t.kind === "thought" ? <i>{t.text}</i> : t.text}
+                <span className={cn("ml-1 text-[10px]", muted)}>· {ago(t.at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {m.lastActivity && (
         <div>

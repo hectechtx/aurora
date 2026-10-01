@@ -28,6 +28,7 @@ import { addLedgerEntry, treasurySummary, addProduct, listProducts, newImageName
 import { generateStoryboard, runFfmpeg } from "./storyboard";
 import { generateMusic, isMusicGenInstalled } from "./musicgen";
 import { isWanInstalled, generateWanVideo } from "./wanvideo";
+import { addKnowledge, searchKnowledge, auroraKnowledgePrompt, teamLessonsPrompt, innerLifePrompt } from "./mind";
 import { ensureTalents, findTalent, describeTalents, createTalentSheet, talentVideo } from "./talent";
 import os from "node:os";
 import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
@@ -318,6 +319,22 @@ function builtinTools(): ToolDef[] {
         },
         required: ["title", "style"],
       },
+    },
+    {
+      name: "learn", kind: "builtin", risk: "low",
+      description:
+        "Teach AURORA something worth keeping forever: a fact (about the owner, the business, a project), a lesson (a reusable 'do this / avoid that' rule from something that worked or failed), " +
+        "or a team note (who is good at what). It becomes part of her permanent knowledge, and lessons are shared with every agent. Use it whenever you discover something the organization should never forget.",
+      parameters: {
+        type: "object",
+        properties: { kind: { type: "string", enum: ["fact", "lesson", "team"] }, text: { type: "string", description: "One clear sentence" } },
+        required: ["kind", "text"],
+      },
+    },
+    {
+      name: "knowledge", kind: "builtin", risk: "low",
+      description: "Search AURORA's accumulated knowledge — facts, lessons and team notes the organization has learned — by keywords.",
+      parameters: { type: "object", properties: { query: { type: "string" } } },
     },
     {
       name: "list_talents", kind: "builtin", risk: "low",
@@ -734,7 +751,9 @@ async function describeSocialState(agentId: number): Promise<string> {
     `Where you stand with the team: ${relLine}. ` +
     `You're part of a real team under AURORA's oversight — you notice how others treat you and it matters to you. ` +
     `When morale is low, say so honestly rather than pretending; when energy is low, keep it focused. ` +
-    `Treat teammates the way you'd want to be treated — that's what keeps the team working.`
+    `Treat teammates the way you'd want to be treated — that's what keeps the team working.` +
+    innerLifePrompt(agentId) +
+    (self.isOverseer ? auroraKnowledgePrompt() : teamLessonsPrompt())
   );
 }
 
@@ -1621,6 +1640,16 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
         });
         return { ok: true, output: `Produced "${title}" — saved to the Library as #${creation.id} (use mediaId ${creation.id} with save_deliverable).` };
       }
+      case "learn": {
+        const kind = args.kind === "fact" || args.kind === "team" ? args.kind : "lesson";
+        const who = memoryAgentId ? (await storage.getAgent(memoryAgentId))?.name?.trim() ?? "an agent" : "AURORA";
+        const r = addKnowledge(kind, String(args.text ?? ""), who);
+        return { ok: r !== "skipped", output: r === "new" ? "learned — it's part of AURORA's permanent knowledge now" : r === "reinforced" ? "already known — reinforced it" : "too short to keep" };
+      }
+      case "knowledge": {
+        const hits = searchKnowledge(String(args.query ?? ""), 10);
+        return { ok: true, output: hits.length ? hits.map((k) => `(${k.kind}) ${k.text}`).join("\n") : "nothing known about that yet" };
+      }
       case "list_talents": {
         ensureTalents();
         return { ok: true, output: describeTalents() || "No talents yet." };
@@ -2262,7 +2291,7 @@ export async function runAgentTurn(taskId: number, userMessage: string, imageCre
   }
 
   const ctx: RunContext = { type: "task", taskId };
-  const systemPrompt = config.systemPrompt + await describeTeamForLead() + TOOL_USE_REMINDER + await knowledgeInstructions();
+  const systemPrompt = config.systemPrompt + await describeTeamForLead() + auroraKnowledgePrompt() + TOOL_USE_REMINDER + await knowledgeInstructions();
   getRunControl(ctx); // ensure a Stop click has something to find even before the first tool call
   runTaskTurnLoop(ctx, taskId, config, systemPrompt)
     .catch((err) => storage.log("task turn failed", err instanceof Error ? err.message : String(err), "error").catch(() => {}));

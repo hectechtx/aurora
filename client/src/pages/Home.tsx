@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LivingTown } from "@/components/LivingTown";
+import { AuroraMind } from "@/components/AuroraMind";
 import { Card } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Input";
 import { RiskBadge, StatusBadge } from "@/components/ui/Badge";
@@ -309,6 +310,7 @@ export default function Home() {
         />
       )}
       <HomeComposer />
+      <AuroraMind />
       <LivingTown preview height="480px" />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-1 duration-300">

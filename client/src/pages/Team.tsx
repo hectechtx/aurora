@@ -33,6 +33,7 @@ interface Member {
   lastActivity: { text: string; at: number } | null;
   lastTools: string[];
   relationships: { otherAgentId: number; sentiment: number; interactions: number }[];
+  thoughts?: { kind: "thought" | "memory" | "gossip"; text: string; at: number }[];
 }
 
 interface TeamData { members: Member[]; pendingApprovals: number; recentHandoffs: Handoff[]; pipelineFlows: PipelineFlow[]; chatter: Chatter[] }

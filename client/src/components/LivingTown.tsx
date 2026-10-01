@@ -22,6 +22,7 @@ interface TeamMember {
   companyId: number | null; working: boolean; waitingApproval: boolean; currentTask: string | null; lastTools: string[];
   mood: string; lastActivity: { text: string; at: number } | null; morale: number; energy: number;
   relationships?: { otherAgentId: number; sentiment: number; interactions: number }[];
+  thoughts?: { kind: "thought" | "memory" | "gossip"; text: string; at: number }[];
 }
 interface Chatter { agentIds: [number, number]; lines: { agentId: number; text: string }[]; at: number; venue?: VenueId }
 interface TeamData { members: TeamMember[]; chatter: Chatter[] }
@@ -551,6 +552,9 @@ export function LivingTown({ className, height, preview = false }: { className?:
         } else {
           const r = routine(seed, home, work);
           wanted = r; asleep = r.asleep; emote = r.emote;
+          // A fresh private thought floats over their head for a few minutes.
+          const t = m.thoughts?.find((x) => x.kind === "thought");
+          if (!asleep && t && Date.now() - t.at < 4 * 60_000) emote = `💭 ${t.text}`;
         }
         place(`a${m.id}`, wanted, {
           key: `a${m.id}`, agentId: m.id, name: m.name, role: m.role ?? "", hue, person: hash(m.name) % 6, bubble, emote, asleep, avatarPath: m.avatarPath, working: m.working, lead: m.isOverseer,

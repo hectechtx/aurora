@@ -7,17 +7,18 @@
 // competes with actual work for the single GPU. Relationship changes come
 // from these observable events, not from random numbers.
 import { getStorage } from "./storage";
-import { chat } from "./ollama";
+import { converse, think, recentThoughts, reflect, reflectionDue } from "./mind";
 import type { Agent } from "@shared/schema";
 import { VENUES, agentSeed, routineAt, type VenueId } from "@shared/town";
 
 export interface Chatter { agentIds: [number, number]; lines: { agentId: number; text: string }[]; at: number; venue?: VenueId }
 
-const ENCOUNTER_EVERY_MS = 10 * 60_000;
-const CHATTER_MODEL = "qwen3.5:4b";
+const ENCOUNTER_EVERY_MS = 4 * 60_000;
+const THOUGHT_EVERY_MS = 90_000;
 const MAX_CHATTER = 20;
 const recent: Chatter[] = [];
 let lastEncounterAt = 0;
+let lastThoughtAt = 0;
 let encounterRunning = false;
 
 export function recentChatter(withinMs = 5 * 60_000): Chatter[] {
@@ -46,64 +47,52 @@ export async function worldTick(busyAgentIds: Set<number>, urgentWaiting: boolea
   }
 
   if (encounterRunning || urgentWaiting || busyAgentIds.size > 0) return;
-  if (Date.now() - lastEncounterAt < ENCOUNTER_EVERY_MS) return;
-  const idle = agents.filter((a) => a.status === "active" && !a.isOverseer && !busyAgentIds.has(a.id));
-  if (idle.length < 2) return;
-
-  lastEncounterAt = Date.now();
+  const config = await storage.getConfig();
+  if (!config.model) return;
   encounterRunning = true;
   try {
-    const first = idle[Math.floor(Math.random() * idle.length)];
-    // Mostly colleagues from the same company bump into each other, with the
-    // occasional cross-company encounter.
-    const sameCompany = idle.filter((a) => a !== first && a.companyId != null && a.companyId === first.companyId);
-    const pool = sameCompany.length && Math.random() < 0.7 ? sameCompany : idle.filter((a) => a !== first);
-    await encounter(first, pool[Math.floor(Math.random() * pool.length)]);
+    // One inner-life moment per idle tick: AURORA's reflection when it's due,
+    // otherwise a conversation every few minutes, otherwise a private thought.
+    if (reflectionDue()) { await reflect(config.ollamaHost, config.model); return; }
+    const idle = agents.filter((a) => a.status === "active" && !busyAgentIds.has(a.id));
+    if (Date.now() - lastEncounterAt >= ENCOUNTER_EVERY_MS && idle.filter((a) => !a.isOverseer).length >= 2) {
+      lastEncounterAt = Date.now();
+      await encounter(idle.filter((a) => !a.isOverseer), agents);
+    } else if (Date.now() - lastThoughtAt >= THOUGHT_EVERY_MS && idle.length) {
+      lastThoughtAt = Date.now();
+      // Whoever has gone longest without a thought goes next.
+      const next = [...idle].sort((x, y) => (recentThoughts(x.id, 1, ["thought"])[0]?.at ?? 0) - (recentThoughts(y.id, 1, ["thought"])[0]?.at ?? 0))[0];
+      await think(config.ollamaHost, config.model, next);
+    }
   } catch (err) {
-    await storage.log("world encounter failed", err instanceof Error ? err.message : String(err), "error").catch(() => {});
+    await storage.log("world moment failed", err instanceof Error ? err.message : String(err), "error").catch(() => {});
   } finally {
     encounterRunning = false;
   }
 }
 
-function brief(a: Agent): string {
-  return `${a.name.trim()}${a.role ? ` (${a.role})` : ""} — mood ${a.mood}, energy ${a.energy}/100. Personality: ${a.persona.replace(/\s+/g, " ").slice(0, 280)}`;
-}
-
-/** Two teammates bump into each other in the lounge: one short model call writes a 2-4 line exchange in their voices. */
-async function encounter(a: Agent, b: Agent): Promise<void> {
+/** Two idle teammates meet wherever the town routine has them — sometimes to gossip about a third. */
+async function encounter(idle: Agent[], everyone: Agent[]): Promise<void> {
   const storage = getStorage();
-  // They meet wherever the town routine has the first one right now.
+  const config = await storage.getConfig();
+  const a = idle[Math.floor(Math.random() * idle.length)];
+  // Mostly colleagues from the same company, with the occasional cross-company encounter.
+  const sameCompany = idle.filter((x) => x !== a && x.companyId != null && x.companyId === a.companyId);
+  const pool = sameCompany.length && Math.random() < 0.7 ? sameCompany : idle.filter((x) => x !== a);
+  const b = pool[Math.floor(Math.random() * pool.length)];
   const stop = routineAt(agentSeed(a.id));
   const venue: VenueId = stop.kind === "venue" ? stop.venue : "cafe";
   const place = VENUES[venue];
-  const config = await storage.getConfig();
-  if (!config.model) return;
-  const rel = (await storage.getRelationships(a.id)).find((r) => r.otherAgentId === b.id);
-  const standing = rel ? `They've worked together ${rel.interactions} times; rapport ${rel.sentiment} on a -100..100 scale${rel.note ? ` (last: ${rel.note})` : ""}.` : "They haven't worked together much yet.";
-  const [lastA] = (await storage.getAgentLog(a.id, 2)).filter((e) => e.role === "assistant").slice(-1);
-  const prompt =
-    `Two coworkers on an AI content team run into each other at the ${place.name} in their town (${place.doing}).\n` +
-    `A: ${brief(a)}\nB: ${brief(b)}\n${standing}\n` +
-    (lastA ? `${a.name.trim()} was recently working on: ${lastA.content.replace(/\s+/g, " ").slice(0, 200)}\n` : "") +
-    `Write their short, natural exchange — 2 to 4 lines total, alternating, in character, about work, how they're doing, or what they're up to there. ` +
-    `Format each line exactly as "A: ..." or "B: ...". No narration, no stage directions.`;
-  // Small talk goes to the light model so it doesn't evict/compete with the
-  // 9B model doing real work; falls back to the main model if it's missing.
-  const res = await chat(config.ollamaHost, CHATTER_MODEL, [{ role: "user", content: prompt }], [], 2048, { think: false })
-    .catch(() => chat(config.ollamaHost, config.model, [{ role: "user", content: prompt }], [], 2048, { think: false }));
-  const lines = (res.message.content ?? "")
-    .split(/\r?\n/)
-    .map((l) => l.trim().match(/^\**\s*(A|B)\s*\**\s*:\s*(.+)$/i))
-    .filter((m): m is RegExpMatchArray => !!m)
-    .slice(0, 4)
-    .map((m) => ({ agentId: m[1].toUpperCase() === "A" ? a.id : b.id, text: m[2].replace(/^["“]|["”]$/g, "").slice(0, 180) }));
-  if (lines.length < 2) return;
-  recent.push({ agentIds: [a.id, b.id], lines, at: Date.now(), venue });
+  // Gossip about someone at least one of them has real feelings about.
+  let about: Agent | undefined;
+  if (Math.random() < 0.4) {
+    const rels = [...(await storage.getRelationships(a.id)), ...(await storage.getRelationships(b.id))].filter((r) => Math.abs(r.sentiment) >= 5 && r.otherAgentId !== a.id && r.otherAgentId !== b.id);
+    const pick = rels[Math.floor(Math.random() * rels.length)];
+    about = pick ? everyone.find((x) => x.id === pick.otherAgentId) : undefined;
+  }
+  const m = await converse(config.ollamaHost, config.model, a, b, { place: place.name, doing: place.doing, about });
+  if (!m) return;
+  recent.push({ agentIds: m.agentIds, lines: m.lines, at: m.at, venue });
   if (recent.length > MAX_CHATTER) recent.shift();
-  await storage.bumpRelationship(a.id, b.id, 1, `chatted at the ${place.name}`).catch(() => {});
-  await storage.bumpRelationship(b.id, a.id, 1).catch(() => {});
-  await storage.adjustAgentVitals(a.id, 1, 0).catch(() => {});
-  await storage.adjustAgentVitals(b.id, 1, 0).catch(() => {});
-  await storage.log(`${place.name} chat: ${a.name.trim()} & ${b.name.trim()}`, lines.map((l) => l.text).join(" / ").slice(0, 200));
+  await storage.log(`${about ? "gossip" : "chat"} at the ${place.name}: ${a.name.trim()} & ${b.name.trim()}`, m.lines.map((l) => l.text).join(" / ").slice(0, 200));
 }

@@ -1,4 +1,5 @@
 import express from "express";
+import { recentThoughts, teamThoughts, listKnowledge, forgetKnowledge, reflect, reflectionStatus } from "./mind";
 import type { Express, Request, Response } from "express";
 import type { Server } from "node:http";
 import fs from "node:fs";
@@ -537,6 +538,22 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
   // job description, through the same local image-gen pipeline as any other
   // creation. Not tracked as a Library creation (it's an agent property, not
   // generated content to browse) — just a filename on the agent row.
+  // AURORA's mind: what she has learned, the team's recent inner life, and a
+  // manual "reflect now". The owner can delete anything she shouldn't keep.
+  app.get("/api/mind", async (_req, res) => {
+    res.json({ status: reflectionStatus(), knowledge: listKnowledge(150), thoughts: teamThoughts(40) });
+  });
+  app.post("/api/mind/reflect", async (_req, res) => {
+    const config = await storage().getConfig();
+    res.json({ result: await reflect(config.ollamaHost, config.model) });
+  });
+  app.delete("/api/mind/knowledge/:id", async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    forgetKnowledge(id);
+    res.json({ ok: true });
+  });
+
   app.post("/api/agents/:id/avatar/generate", async (req, res) => {
     const id = parseId(req, res);
     if (id === null) return;
@@ -870,6 +887,7 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
         lastActivity: lastReply ? { text: lastReply.content.slice(0, 280), at: lastReply.createdAt } : null,
         lastTools: [...new Set(lastTools)].slice(0, 4),
         relationships: rels.map((r) => ({ otherAgentId: r.otherAgentId, sentiment: r.sentiment, interactions: r.interactions })),
+        thoughts: recentThoughts(a.id, 5).map((t) => ({ kind: t.kind, text: t.text, at: t.at })),
       };
     }));
     // Who just passed work to whom — drives agents "walking over" to each

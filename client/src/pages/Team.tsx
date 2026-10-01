@@ -8,7 +8,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { TeamWorld, type Handoff, type PipelineFlow, type Chatter } from "@/components/TeamWorld";
 import { TownMap, type TownData } from "@/components/TownMap";
-import { LivingTown } from "@/components/LivingTown";
 import { Play, Pause, X, ShieldAlert, Wrench } from "lucide-react";
 
 interface Member {
@@ -121,7 +120,7 @@ export default function Team() {
   const qc = useQueryClient();
   const { data } = useQuery<TeamData>({ queryKey: ["/api/team"], refetchInterval: 2500 });
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [view, setView] = useState<"live" | "town" | "world" | "ring">("live");
+  const [view, setView] = useState<"town" | "world" | "ring">("town");
   // Which company's office the Office view shows ("all" = everyone).
   const [office, setOffice] = useState<number | "hq" | "all">("all");
   const [selectedSim, setSelectedSim] = useState<number | null>(null);
@@ -173,7 +172,7 @@ export default function Team() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <PageHeader title="Team" description="Watch AURORA and her agents work, live." />
           <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-            {(["live", "town", "world", "ring"] as const).map((v) => (
+            {(["town", "world", "ring"] as const).map((v) => (
               <button
                 key={v}
                 type="button"
@@ -181,7 +180,7 @@ export default function Team() {
                 aria-pressed={view === v}
                 className={cn("rounded px-2.5 py-1 capitalize", view === v ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:text-foreground")}
               >
-                {v === "live" ? "Live" : v === "town" ? "Directory" : v === "world" ? "Office" : "Ring"}
+                {v === "town" ? "Directory" : v === "world" ? "Office" : "Ring"}
               </button>
             ))}
           </div>
@@ -203,9 +202,7 @@ export default function Team() {
 
       <div className="flex min-h-0 flex-1">
         <div ref={stageRef} className="relative min-h-0 flex-1 overflow-auto">
-          {view === "live" ? (
-            <div className="p-4 sm:p-6"><LivingTown /></div>
-          ) : view === "town" && town ? (
+          {view === "town" && town ? (
             <div className="p-4 sm:p-6">
               <TownMap data={town} selectedSimId={selectedSim} onOpenCompany={(id) => { setOffice(id); setView("world"); }} onSelectSim={(id) => setSelectedSim(id === selectedSim ? null : id)} />
             </div>

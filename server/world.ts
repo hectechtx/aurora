@@ -9,8 +9,9 @@
 import { getStorage } from "./storage";
 import { chat } from "./ollama";
 import type { Agent } from "@shared/schema";
+import { VENUES, agentSeed, routineAt, type VenueId } from "@shared/town";
 
-export interface Chatter { agentIds: [number, number]; lines: { agentId: number; text: string }[]; at: number }
+export interface Chatter { agentIds: [number, number]; lines: { agentId: number; text: string }[]; at: number; venue?: VenueId }
 
 const ENCOUNTER_EVERY_MS = 10 * 60_000;
 const CHATTER_MODEL = "qwen3.5:4b";
@@ -34,6 +35,14 @@ export async function worldTick(busyAgentIds: Set<number>, urgentWaiting: boolea
   for (const a of agents) {
     if (busyAgentIds.has(a.id) || (a.energy ?? 100) >= 100) continue;
     await storage.adjustAgentVitals(a.id, 0, a.status === "paused" ? 3 : 2).catch(() => {});
+  }
+  // Time off in town lifts spirits: an idle agent whose routine has them at
+  // the park, theater, rec center… gains a little morale each tick (capped so
+  // leisure alone never fakes "thriving" — good work does the rest).
+  for (const a of agents) {
+    if (a.status !== "active" || busyAgentIds.has(a.id) || (a.morale ?? 70) >= 85) continue;
+    const stop = routineAt(agentSeed(a.id));
+    if (stop.kind === "venue") await storage.adjustAgentVitals(a.id, VENUES[stop.venue].morale, 0).catch(() => {});
   }
 
   if (encounterRunning || urgentWaiting || busyAgentIds.size > 0) return;
@@ -64,16 +73,20 @@ function brief(a: Agent): string {
 /** Two teammates bump into each other in the lounge: one short model call writes a 2-4 line exchange in their voices. */
 async function encounter(a: Agent, b: Agent): Promise<void> {
   const storage = getStorage();
+  // They meet wherever the town routine has the first one right now.
+  const stop = routineAt(agentSeed(a.id));
+  const venue: VenueId = stop.kind === "venue" ? stop.venue : "cafe";
+  const place = VENUES[venue];
   const config = await storage.getConfig();
   if (!config.model) return;
   const rel = (await storage.getRelationships(a.id)).find((r) => r.otherAgentId === b.id);
   const standing = rel ? `They've worked together ${rel.interactions} times; rapport ${rel.sentiment} on a -100..100 scale${rel.note ? ` (last: ${rel.note})` : ""}.` : "They haven't worked together much yet.";
   const [lastA] = (await storage.getAgentLog(a.id, 2)).filter((e) => e.role === "assistant").slice(-1);
   const prompt =
-    `Two coworkers on an AI content team run into each other in the office lounge.\n` +
+    `Two coworkers on an AI content team run into each other at the ${place.name} in their town (${place.doing}).\n` +
     `A: ${brief(a)}\nB: ${brief(b)}\n${standing}\n` +
     (lastA ? `${a.name.trim()} was recently working on: ${lastA.content.replace(/\s+/g, " ").slice(0, 200)}\n` : "") +
-    `Write their short, natural exchange — 2 to 4 lines total, alternating, in character, about work or how they're doing. ` +
+    `Write their short, natural exchange — 2 to 4 lines total, alternating, in character, about work, how they're doing, or what they're up to there. ` +
     `Format each line exactly as "A: ..." or "B: ...". No narration, no stage directions.`;
   // Small talk goes to the light model so it doesn't evict/compete with the
   // 9B model doing real work; falls back to the main model if it's missing.
@@ -86,9 +99,11 @@ async function encounter(a: Agent, b: Agent): Promise<void> {
     .slice(0, 4)
     .map((m) => ({ agentId: m[1].toUpperCase() === "A" ? a.id : b.id, text: m[2].replace(/^["“]|["”]$/g, "").slice(0, 180) }));
   if (lines.length < 2) return;
-  recent.push({ agentIds: [a.id, b.id], lines, at: Date.now() });
+  recent.push({ agentIds: [a.id, b.id], lines, at: Date.now(), venue });
   if (recent.length > MAX_CHATTER) recent.shift();
-  await storage.bumpRelationship(a.id, b.id, 1, `chatted in the lounge`).catch(() => {});
+  await storage.bumpRelationship(a.id, b.id, 1, `chatted at the ${place.name}`).catch(() => {});
   await storage.bumpRelationship(b.id, a.id, 1).catch(() => {});
-  await storage.log(`lounge chat: ${a.name.trim()} & ${b.name.trim()}`, lines.map((l) => l.text).join(" / ").slice(0, 200));
+  await storage.adjustAgentVitals(a.id, 1, 0).catch(() => {});
+  await storage.adjustAgentVitals(b.id, 1, 0).catch(() => {});
+  await storage.log(`${place.name} chat: ${a.name.trim()} & ${b.name.trim()}`, lines.map((l) => l.text).join(" / ").slice(0, 200));
 }

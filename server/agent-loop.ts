@@ -20,12 +20,14 @@ import { searchAndDownloadTrack } from "./musicsearch";
 import { webSearch, webFetch, fetchImageBytes } from "./web-tools";
 import { browseInteract, BrowserToolError, READ_ONLY_ACTIONS, type BrowseAction } from "./browser-tool";
 import { trendingVideos, youtubeSearch, videoTranscript, newsHeadlines, saveDocument, makeVoiceover, VOICE_IDS } from "./content-tools";
-import { getCompanies } from "./companies";
+import { getCompanies, setAgentCompany, addWorldEvent } from "./companies";
+import { isAgencyInstalled, searchAgency, specialistProfile } from "./agency";
 import { leadInbox, addDeliverableTag, foundCompany, LEAD_REVIEWED_TAG, type FoundingInput } from "./lead";
 import { timestampedTranscript, makeClip } from "./clips";
 import { addLedgerEntry, treasurySummary, addProduct, listProducts, newImageName, artworkPrompt, composeDesign } from "./commerce";
 import { generateStoryboard, runFfmpeg } from "./storyboard";
 import { generateMusic, isMusicGenInstalled } from "./musicgen";
+import { isWanInstalled, generateWanVideo } from "./wanvideo";
 import os from "node:os";
 import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
@@ -264,6 +266,7 @@ function builtinTools(): ToolDef[] {
           captions: { type: "boolean", description: "Burn captions in (default true)" },
           voice: { type: "string", enum: VOICE_IDS },
           visual_style: { type: "string", description: "One look for every scene, e.g. 'bright colorful 3D cartoon, kid-friendly'" },
+          animated: { type: "boolean", description: "Animate key scenes with real motion (Wan 2.2) — much slower; default false" },
         },
         required: ["title"],
       },
@@ -875,6 +878,20 @@ async function teamworkTools(ctx: RunContext): Promise<ToolDef[]> {
         parameters: { type: "object", properties: { question_id: { type: "number" }, answer: { type: "string" } }, required: ["question_id", "answer"] },
       },
       {
+        name: "browse_agency", kind: "builtin", risk: "low",
+        description: "As lead: search The Agency — a library of 260+ specialist profiles (marketing, sales, finance, engineering, design, product, strategy, support…) — to find the right expert to hire. Returns specialist ids, names and what they do.",
+        parameters: { type: "object", properties: { query: { type: "string", description: "e.g. 'tiktok growth', 'bookkeeping', 'email marketing'" } }, required: ["query"] },
+      },
+      {
+        name: "hire_specialist", kind: "builtin", risk: "low",
+        description: "As lead: hire a specialist from The Agency (id from browse_agency) as a real agent at one of our companies — they get that specialist's expertise as their personality and job. Give them a person's name.",
+        parameters: {
+          type: "object",
+          properties: { specialist: { type: "string" }, name: { type: "string", description: "The new agent's name, e.g. 'Lena Park'" }, company: { type: "string", description: "Company name, or 'HQ'" } },
+          required: ["specialist", "name", "company"],
+        },
+      },
+      {
         name: "found_company", kind: "builtin", risk: "low",
         description:
           "As lead: bring a no-brainer business to life in town — create a new real company with a 2-5 person team (each with name, role, short persona, job) and a standing pipeline that produces its results. " +
@@ -886,7 +903,7 @@ async function teamworkTools(ctx: RunContext): Promise<ToolDef[]> {
             reason: { type: "string", description: "Why it's a no-brainer (market data, costs, revenue path)" },
             team: {
               type: "array",
-              items: { type: "object", properties: { name: { type: "string" }, role: { type: "string" }, persona: { type: "string" }, job: { type: "string" }, lead: { type: "boolean" } }, required: ["name", "role", "job"] },
+              items: { type: "object", properties: { name: { type: "string" }, role: { type: "string" }, persona: { type: "string" }, job: { type: "string" }, specialist: { type: "string", description: "Optional Agency specialist id — fills in expert persona/job" }, lead: { type: "boolean" } }, required: ["name", "role"] },
             },
             pipeline: {
               type: "object",
@@ -1231,7 +1248,27 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
       case "generate_video": {
         const prompt = String(args.prompt ?? "");
 
-        // Prefer WanGP. The old LTX-Video path (videogen.ts) cannot run on
+        // Preferred: Wan 2.2 in ComfyUI — make a still first, then animate it
+        // (image-to-video is far more consistent than text-only).
+        if (isWanInstalled() && config.imageGenHost) {
+          try {
+            const { pngBuffer } = await generateImage(config.imageGenHost, prompt, config.ollamaHost);
+            const buffer = await generateWanVideo(config.imageGenHost, {
+              prompt: `${prompt}. Smooth natural motion, gentle camera movement, no scene changes.`, image: pngBuffer, seconds: 4, ollamaHost: config.ollamaHost,
+            });
+            const filename = `${randomUUID()}.mp4`;
+            fs.writeFileSync(path.join(getCreationsDir(), filename), buffer);
+            const creation = await storage.createCreation({
+              taskId: ctx.type === "task" ? ctx.taskId : undefined, agentId: ctx.type === "agent" ? ctx.agentId : undefined,
+              kind: "video", prompt, filePath: filename,
+            });
+            return { ok: true, output: `Generated a 4s video with Wan 2.2 — saved to the Library (creation #${creation.id}).` };
+          } catch (err) {
+            await storage.log("Wan video failed, trying other backends", err instanceof Error ? err.message.slice(0, 200) : String(err), "error");
+          }
+        }
+
+        // Then WanGP. The old LTX-Video path (videogen.ts) cannot run on
         // this machine at all — its fp32 T5 encoder is 17.9GB against 15.7GB
         // of RAM — so WanGP being up is the difference between video working
         // and not. See wangp.ts. LTX is still tried as a fallback because on
@@ -1437,7 +1474,7 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
         const minutes = Math.max(0.5, Math.min(10, Number(args.minutes) || 2));
         const voice = VOICE_IDS.includes(String(args.voice)) ? String(args.voice) : "af_heart";
         const result = await generateStoryboard({
-          topic, script, targetMinutes: minutes, mode: "images",
+          topic, script, targetMinutes: minutes, mode: args.animated === true && isWanInstalled() ? "hybrid" : "images",
           orientation: args.orientation === "portrait" ? "portrait" : "landscape", voiceId: voice,
           ollamaHost: config.ollamaHost, ollamaModel: config.model, imageGenHost: config.imageGenHost, captions: args.captions !== false,
           visualStyle: args.visual_style ? String(args.visual_style) : undefined,
@@ -1610,8 +1647,33 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
         await storage.log(`AURORA answered: ${d.title}`, answer.slice(0, 200), "ok", "AURORA");
         return { ok: true, output: "Answered — the agent will act on it." };
       }
+      case "browse_agency": {
+        if (!isAgencyInstalled()) return { ok: false, output: "The Agency library isn't installed" };
+        const hits = searchAgency(String(args.query ?? ""), 12);
+        return { ok: true, output: hits.length ? hits.map((h) => `${h.id} — ${h.name}: ${h.description.slice(0, 140)}`).join("\n") : "no matching specialists" };
+      }
+      case "hire_specialist": {
+        const prof = specialistProfile(String(args.specialist ?? ""));
+        if (!prof) return { ok: false, output: `no specialist "${args.specialist}" — use browse_agency for ids` };
+        const name = String(args.name ?? "").trim().slice(0, 60);
+        if (!name) return { ok: false, output: "give the new agent a name" };
+        const all = await storage.getAgents();
+        if (all.length >= MAX_AGENTS) return { ok: false, output: `the organization is at its ${MAX_AGENTS}-agent limit` };
+        if (all.some((a) => a.name.trim().toLowerCase() === name.toLowerCase())) return { ok: false, output: `an agent named ${name} already exists` };
+        const companyName = String(args.company ?? "HQ").trim();
+        const company = /^hq$/i.test(companyName) ? null : getCompanies().find((c) => c.kind === "real" && c.name.toLowerCase() === companyName.toLowerCase());
+        if (company === undefined) return { ok: false, output: `no company named "${companyName}"` };
+        const created = await storage.createAgent({ name, role: prof.name, persona: `${name}: ${prof.persona}`, jobDescription: prof.job, scheduleMinutes: null });
+        setAgentCompany(created.id, company?.id ?? null);
+        addWorldEvent("hire", `${company?.name ?? "AURORA HQ"} hired ${name} as ${prof.name}.`, company?.id ?? null);
+        await storage.log(`AURORA hired ${name} (${prof.name})`, company?.name ?? "HQ", "ok", "AURORA");
+        return { ok: true, output: `Hired ${name} as ${prof.name} at ${company?.name ?? "AURORA HQ"}. Give them their first job with handoff_to_agent, or add them to a pipeline.` };
+      }
       case "found_company": {
-        const team = Array.isArray(args.team) ? args.team as FoundingInput["team"] : [];
+        const team = (Array.isArray(args.team) ? args.team as (FoundingInput["team"][number] & { specialist?: string })[] : []).map((t) => {
+          const prof = t.specialist ? specialistProfile(String(t.specialist)) : null;
+          return prof ? { ...t, role: t.role || prof.name, persona: t.persona || prof.persona, job: t.job ? `${t.job}\n\n${prof.job}`.slice(0, 2200) : prof.job } : { ...t, job: t.job ?? "" };
+        });
         const pipeline = (args.pipeline ?? {}) as Partial<FoundingInput["pipeline"]>;
         const r = await foundCompany({
           name: String(args.name ?? ""), industry: String(args.industry ?? ""), mission: String(args.mission ?? ""), reason: String(args.reason ?? ""),
@@ -1981,7 +2043,18 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
   const tools = await allTools(ctx, config.advancedToolsEnabled);
   let response;
   try {
-    response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx);
+    try {
+      response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx);
+    } catch (err) {
+      // An agent on a "big brain" model (e.g. MiniMax via Ollama cloud) falls
+      // back to the owner's local model when the cloud isn't reachable or the
+      // account isn't signed in (401) — work never stops over it.
+      const local = (await storage.getConfig()).model;
+      if (!local || local === config.model) throw err;
+      await storage.log("big-brain model unavailable, using local model", `${config.model}: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, "error");
+      config = { ...config, model: local };
+      response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx);
+    }
   } catch (err) {
     const reply = `Couldn't reach Ollama at ${config.ollamaHost}: ${err instanceof Error ? err.message : String(err)}. Is "ollama serve" running?`;
     await updateMessage(ctx, messageId, reply, transcript.length ? JSON.stringify(transcript) : null);
@@ -2284,8 +2357,11 @@ export async function runAgentTick(agentId: number): Promise<TurnResult | { skip
     if (!agent) throw new Error(`Agent ${agentId} not found`);
     if (agent.status !== "active") return { skipped: "agent is paused" };
 
-    const config = await storage.getConfig();
-    if (!config.model) return { skipped: "no Ollama model configured" };
+    const baseConfig = await storage.getConfig();
+    if (!baseConfig.model) return { skipped: "no Ollama model configured" };
+    // Agents can run on their own model — the heavy thinkers use the big-brain
+    // cloud model; runLoop falls back to the local model if it's unavailable.
+    const config = agent.preferredModel ? { ...baseConfig, model: agent.preferredModel } : baseConfig;
 
     const item = await storage.claimNextPendingQueueItem(agentId);
     if (!item) return { skipped: "queue is empty" };

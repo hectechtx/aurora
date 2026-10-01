@@ -20,6 +20,7 @@ import Browser from "@/pages/Browser";
 import GodsEye from "@/pages/GodsEye";
 import Agents from "@/pages/Agents";
 import Team from "@/pages/Team";
+import Town from "@/pages/Town";
 import Pipelines from "@/pages/Pipelines";
 import Treasury from "@/pages/Treasury";
 import Store from "@/pages/Store";
@@ -44,6 +45,7 @@ export default function App() {
                     <Switch>
                       <Route path="/" component={Home} />
                       <Route path="/team" component={Team} />
+                      <Route path="/town" component={Town} />
                       <Route path="/pipelines" component={Pipelines} />
                       <Route path="/treasury" component={Treasury} />
                       <Route path="/store" component={Store} />

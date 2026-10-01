@@ -301,7 +301,7 @@ export default function Home() {
     <div className="p-8 max-w-6xl mx-auto overflow-y-auto h-screen space-y-6">
       <PageHeader title={`${greeting()}.`} description="What's happening across your vessel right now." />
       <PulseStrip />
-      <LivingTown />
+      <LivingTown preview height="480px" />
       <HomeComposer />
 
       {overseer && (

@@ -5,6 +5,7 @@ import {
   ListTodo, Image, BrainCircuit, SquareTerminal, Puzzle, ShieldCheck, ScrollText,
   Settings as SettingsIcon, Bot, Inbox, LayoutDashboard, Globe, Sparkles, FolderKanban,
   Palette, LogOut, ChevronUp, HelpCircle, Music as MusicIcon, Eye, Users, Workflow, ShoppingBag, Landmark,
+  Castle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ const NAV_GROUPS = [
     label: "Agents",
     items: [
       { href: "/team", label: "Team", icon: Users },
+      { href: "/town", label: "Town", icon: Castle },
       { href: "/pipelines", label: "Pipelines", icon: Workflow },
       { href: "/store", label: "Store", icon: ShoppingBag },
       { href: "/treasury", label: "Treasury", icon: Landmark },

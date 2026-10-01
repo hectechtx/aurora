@@ -18,6 +18,7 @@ import { health as wangpHealth, generateVideo as wangpGenerateVideo } from "./wa
 import { isKokoroInstalled, synthesize as kokoroSynthesize } from "./kokoro";
 import { synthesize } from "./piper";
 import { getMusicDir } from "./paths";
+import { isWanInstalled, generateWanVideo } from "./wanvideo";
 
 export class StoryboardError extends Error {}
 
@@ -231,12 +232,11 @@ async function renderScene(
   if (clipBuffer) {
     const clipPath = path.join(workDir, `clip-${index}.mp4`);
     fs.writeFileSync(clipPath, clipBuffer);
-    // The AI clip is only ~1s — loop it to fill the narration's duration
-    // rather than freezing on the last frame, so there's still motion
-    // throughout the scene.
+    // Play the clip once, then hold its last frame for the rest of the
+    // narration — looping a 4s Wan clip visibly repeats the same motion.
     await runFfmpeg([
-      "-y", "-stream_loop", "-1", "-i", clipPath, "-i", narrationPath, "-t", duration.toFixed(2),
-      "-vf", `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${FPS}`,
+      "-y", "-i", clipPath, "-i", narrationPath, "-t", duration.toFixed(2),
+      "-vf", `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${FPS},tpad=stop_mode=clone:stop_duration=${Math.ceil(duration)}`,
       "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", segmentPath,
     ]);
   } else {
@@ -271,6 +271,20 @@ async function renderScene(
 async function renderSceneClip(
   scene: Scene, clipWidth: number, clipHeight: number, opts: GenerateStoryboardOptions,
 ): Promise<Buffer | null> {
+  // Preferred: Wan 2.2 in ComfyUI, image-to-video — make the scene's image
+  // first, then animate it (far more consistent than text-only video).
+  if (isWanInstalled() && opts.imageGenHost) {
+    try {
+      const { pngBuffer } = await generateImage(opts.imageGenHost, scene.visualPrompt, opts.ollamaHost);
+      const portrait = opts.orientation === "portrait";
+      return await generateWanVideo(opts.imageGenHost, {
+        prompt: `${scene.visualPrompt}. Smooth natural motion, gentle camera movement, consistent characters, no scene changes.`,
+        image: pngBuffer, width: portrait ? 480 : 832, height: portrait ? 832 : 480, seconds: 4, ollamaHost: opts.ollamaHost,
+      });
+    } catch {
+      // Fall through to WanGP / LTX, then to a still.
+    }
+  }
   if (await wangpHealth()) {
     try {
       // WanGP takes frame counts, and its resolution string wants even dims.
@@ -298,7 +312,7 @@ export async function generateStoryboard(opts: GenerateStoryboardOptions, hooks:
   const { onProgress, shouldStop } = hooks;
   // Pure-video mode needs *a* working clip generator; hybrid/slideshow can
   // always fall back to stills.
-  if (opts.mode === "video" && !(await wangpHealth()) && !isVideoGenInstalled()) {
+  if (opts.mode === "video" && !isWanInstalled() && !(await wangpHealth()) && !isVideoGenInstalled()) {
     throw new StoryboardError("Video mode needs a video backend running — start WanGP in Pinokio, or pick Slideshow/Hybrid instead.");
   }
 

@@ -78,22 +78,21 @@ function moodEmoji(morale: number): string {
  */
 function LiveAuroraPortrait({ avatarPath, active }: { avatarPath?: string | null; active: boolean }) {
   return (
-    <div className="relative h-24 w-24 shrink-0 flex items-center justify-center">
+    <div className="relative h-40 w-40 shrink-0 flex items-center justify-center">
       {active && (
         <>
-          <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping [animation-duration:3s]" />
-          <span className="absolute inset-2 rounded-full bg-accent/20 animate-ping [animation-duration:3s] [animation-delay:0.8s]" />
+          <span className="absolute inset-2 rounded-3xl bg-primary/15 animate-ping [animation-duration:3.5s]" />
         </>
       )}
-      <span className="absolute inset-1 rounded-full bg-gradient-to-br from-primary/40 to-accent/40 blur-md animate-pulse [animation-duration:4s]" />
+      <span className="absolute inset-1 rounded-3xl bg-gradient-to-br from-primary/40 to-accent/40 blur-md animate-pulse [animation-duration:4s]" />
       {avatarPath ? (
         <AuthedImage
           src={`/creations/${avatarPath}`}
           alt="AURORA"
-          className="relative h-20 w-20 rounded-full object-cover ring-2 ring-primary/50 shadow-[0_0_20px_-2px] shadow-primary/50"
+          className="relative h-36 w-36 rounded-2xl object-cover ring-2 ring-primary/60 shadow-[0_0_28px_-2px] shadow-primary/60"
         />
       ) : (
-        <span className="relative h-20 w-20 rounded-full bg-gradient-to-br from-primary via-accent to-primary bg-[length:200%_200%] animate-gradient ring-2 ring-primary/50 shadow-[0_0_20px_-2px] shadow-primary/50 flex items-center justify-center">
+        <span className="relative h-36 w-36 rounded-2xl bg-gradient-to-br from-primary via-accent to-primary bg-[length:200%_200%] animate-gradient ring-2 ring-primary/50 shadow-[0_0_20px_-2px] shadow-primary/50 flex items-center justify-center">
           <span className="h-6 w-6 rounded-full bg-background/80 shadow-inner animate-pulse [animation-duration:2.5s]" />
         </span>
       )}
@@ -110,7 +109,7 @@ function OverseerCard({ overseer, activeCount, pending, ready }: { overseer: Age
         <LiveAuroraPortrait avatarPath={overseer.avatarPath} active={overseer.status === "active"} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-lg font-semibold">AURORA</h2>
+            <h2 className="text-2xl font-semibold tracking-wide">AURORA</h2>
             <span className="text-[11px] rounded-full bg-primary/15 text-primary border border-primary/30 px-2 py-0.5 font-medium">Overseer</span>
             <span className="text-[11px] rounded-full bg-surface border border-border px-2 py-0.5 text-muted-foreground">
               {moodEmoji(morale)} {overseer.mood ?? "steady"}
@@ -301,9 +300,6 @@ export default function Home() {
     <div className="p-8 max-w-6xl mx-auto overflow-y-auto h-screen space-y-6">
       <PageHeader title={`${greeting()}.`} description="What's happening across your vessel right now." />
       <PulseStrip />
-      <LivingTown preview height="480px" />
-      <HomeComposer />
-
       {overseer && (
         <OverseerCard
           overseer={overseer}
@@ -312,6 +308,8 @@ export default function Home() {
           ready={readyDeliverables.length}
         />
       )}
+      <HomeComposer />
+      <LivingTown preview height="480px" />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-1 duration-300">
         <StatTile label="Pending approvals" value={pendingApprovals.length} tone="warn" />

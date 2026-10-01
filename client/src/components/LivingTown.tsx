@@ -377,7 +377,7 @@ function paintMap(L: Layout, S: Sheets): HTMLCanvasElement {
 interface Char {
   key: string; agentId?: number; name: string; role: string; hue: number; person: number;
   x: number; y: number; path: Spot[]; targetKey: string; lot: Lot | null; phase: number; face: Face;
-  bubble: string | null; emote: string | null; asleep: boolean; avatarPath: string | null; working: boolean;
+  bubble: string | null; emote: string | null; asleep: boolean; avatarPath: string | null; working: boolean; lead: boolean;
 }
 
 function doorOf(lot: Lot): { x: number; y: number } { return { x: (lot.tx + lot.tw / 2) * T, y: (lot.ty + lot.th) * T }; }
@@ -429,11 +429,17 @@ function portrait(path: string | null): ImageBitmap | null {
     portraitCache.set(path, "loading");
     fetch(`/creations/${path}`, { headers: { Authorization: `Bearer ${getToken() ?? ""}` } })
       .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
-      .then((b) => createImageBitmap(b, { resizeWidth: 96, resizeHeight: 96, resizeQuality: "high" }))
+      .then((b) => createImageBitmap(b, { resizeWidth: 256, resizeHeight: 256, resizeQuality: "high" }))
       .then((bmp) => portraitCache.set(path, bmp))
       .catch(() => portraitCache.set(path, "failed"));
   }
   return null;
+}
+
+/** Portrait card size in device px: grows with zoom; AURORA's is half again bigger. */
+function cardSize(k: number, ui: number, lead: boolean): number {
+  const base = Math.max(22 * ui, Math.min(56 * ui, k * 9));
+  return Math.round(lead ? base * 1.6 : base);
 }
 
 function darkness(hour: number): number {
@@ -544,7 +550,7 @@ export function LivingTown({ className, height, preview = false }: { className?:
           wanted = r; asleep = r.asleep; emote = r.emote;
         }
         place(`a${m.id}`, wanted, {
-          key: `a${m.id}`, agentId: m.id, name: m.name, role: m.role ?? "", hue, person: hash(m.name) % 6, bubble, emote, asleep, avatarPath: m.avatarPath, working: m.working,
+          key: `a${m.id}`, agentId: m.id, name: m.name, role: m.role ?? "", hue, person: hash(m.name) % 6, bubble, emote, asleep, avatarPath: m.avatarPath, working: m.working, lead: m.isOverseer,
         });
       }
       for (const c of tw.companies.filter((x) => x.kind === "simulated")) {
@@ -554,7 +560,7 @@ export function LivingTown({ className, height, preview = false }: { className?:
           const rt = routine(seed, homes[(r.id + 1) % homes.length], work);
           place(`r${r.id}`, rt, {
             key: `r${r.id}`, name: r.name, role: `${r.role ?? "Resident"} · ${c.name}`, hue: c.color, person: hash(r.name) % 6,
-            bubble: null, emote: null, asleep: rt.asleep, avatarPath: null, working: rt.key === "work",
+            bubble: null, emote: null, asleep: rt.asleep, avatarPath: null, working: rt.key === "work", lead: false,
           });
         }
       }
@@ -682,25 +688,38 @@ export function LivingTown({ className, height, preview = false }: { className?:
           ctx.fillStyle = "#fbecc8"; ctx.fillText(label, p.x, p.y + ui);
         }
       }
-      const r = Math.max(7 * ui, Math.min(15 * ui, k * 4.2));
       const showNames = k >= 2.6 * ui;
-      // sleeping agents: a faded badge with z's over their home
+      // Detailed portrait cards ride above each agent; AURORA's is the biggest,
+      // gold-framed, and always named. Drawn last so she's never covered.
       const sleepers = list.filter((c) => c.agentId != null && c.asleep && !c.path.length);
-      const order = [...visible.filter((c) => c.agentId != null), ...sleepers];
+      const order = [...visible.filter((c) => c.agentId != null), ...sleepers].sort((a, b) => Number(a.lead) - Number(b.lead) || a.y - b.y);
       for (const c of order) {
+        const s = cardSize(k, ui, c.lead);
         const head = toScreen(c.x, c.y - 16);
-        const bx = head.x, by = head.y - r - 2 * ui;
-        if (bx < -40 || by < -40 || bx > canvas.width + 40 || by > canvas.height + 40) continue;
-        ctx.globalAlpha = c.asleep ? 0.6 : 1;
-        ctx.beginPath(); ctx.arc(bx, by, r + 2 * ui, 0, Math.PI * 2); ctx.fillStyle = `hsl(${c.hue} 70% 55%)`; ctx.fill();
-        ctx.save(); ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.clip();
+        const bx = head.x, top = head.y - s - 6 * ui;
+        if (bx < -s || top < -s * 2 || bx > canvas.width + s || top > canvas.height + s) continue;
+        ctx.globalAlpha = c.asleep ? 0.55 : 1;
+        const pad = (c.lead ? 4 : 3) * ui;
+        if (c.lead) { ctx.shadowColor = "rgba(255, 210, 120, 0.9)"; ctx.shadowBlur = 18 * ui; }
+        ctx.fillStyle = "#3a2212"; ctx.fillRect(bx - s / 2 - pad - ui, top - pad - ui, s + 2 * pad + 2 * ui, s + 2 * pad + 2 * ui);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = c.lead ? "#f2c14e" : `hsl(${c.hue} 60% 52%)`; ctx.fillRect(bx - s / 2 - pad, top - pad, s + 2 * pad, s + 2 * pad);
+        // little pointer down to the character
+        ctx.beginPath(); ctx.moveTo(bx - 4 * ui, top + s + pad); ctx.lineTo(bx, top + s + pad + 5 * ui); ctx.lineTo(bx + 4 * ui, top + s + pad); ctx.fill();
         const bmp = portrait(c.avatarPath);
-        if (bmp) { ctx.imageSmoothingEnabled = true; ctx.drawImage(bmp, bx - r, by - r, r * 2, r * 2); ctx.imageSmoothingEnabled = false; }
-        else { ctx.fillStyle = "#222"; ctx.fillRect(bx - r, by - r, r * 2, r * 2); ctx.fillStyle = "#fff"; ctx.font = `700 ${Math.round(r)}px Inter, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(c.name[0] ?? "?", bx, by + 1); }
-        ctx.restore();
+        if (bmp) { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, bx - s / 2, top, s, s); ctx.imageSmoothingEnabled = false; }
+        else { ctx.fillStyle = "#222"; ctx.fillRect(bx - s / 2, top, s, s); ctx.fillStyle = "#fff"; ctx.font = `700 ${Math.round(s / 2)}px Inter, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(c.name[0] ?? "?", bx, top + s / 2); }
         ctx.globalAlpha = 1;
-        if (c.asleep) { ctx.fillStyle = "#dfe6ff"; ctx.font = `700 ${Math.round(r)}px ${PIXEL_FONT}`; ctx.textAlign = "center"; ctx.fillText("z", bx + r + 3 * ui, by - r * 0.4 - ((now / 120) % 6)); continue; }
-        if (showNames) {
+        if (c.lead) {
+          const fs = Math.round(Math.max(11, Math.min(15, s / ui / 5)) * ui);
+          ctx.font = `700 ${fs}px ${PIXEL_FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          const t = "✦ AURORA ✦", tw = ctx.measureText(t).width + 12 * ui;
+          ctx.fillStyle = "#3a2212"; ctx.fillRect(bx - tw / 2 - ui, top - pad - fs - 8 * ui, tw + 2 * ui, fs + 6 * ui);
+          ctx.fillStyle = "#f2c14e"; ctx.fillRect(bx - tw / 2, top - pad - fs - 7 * ui, tw, fs + 4 * ui);
+          ctx.fillStyle = "#3a2212"; ctx.fillText(t, bx, top - pad - fs / 2 - 5 * ui);
+        }
+        if (c.asleep) { ctx.fillStyle = "#dfe6ff"; ctx.font = `700 ${Math.round(s / 3)}px ${PIXEL_FONT}`; ctx.textAlign = "center"; ctx.fillText("z", bx + s / 2 + 6 * ui, top + s * 0.3 - ((now / 120) % 6)); continue; }
+        if (showNames && !c.lead) {
           const fs = Math.round(Math.max(10, Math.min(13, (k * 2.6) / ui)) * ui);
           ctx.font = `600 ${fs}px ${PIXEL_FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "top";
           const nm = c.name.split(" ")[0]; const nw = ctx.measureText(nm).width + 8 * ui;
@@ -711,13 +730,14 @@ export function LivingTown({ className, height, preview = false }: { className?:
         const tag = c.bubble ?? (k >= 2 * ui ? c.emote : null);
         if (tag) {
           const fs = Math.round(Math.max(10, Math.min(13, (k * 2.5) / ui)) * ui);
-          ctx.font = `500 ${fs}px ${PIXEL_FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.font = `500 ${fs}px ${PIXEL_FONT}`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
           const text = tag.length > 30 ? tag.slice(0, 29) + "…" : tag;
-          const bw = ctx.measureText(text).width + 12 * ui, bh = fs + 8 * ui, byy = by - r - bh - 6 * ui;
-          ctx.fillStyle = "#3a2212"; ctx.fillRect(bx - bw / 2 - ui, byy - ui, bw + 2 * ui, bh + 2 * ui);
-          ctx.fillStyle = "#fff4dc"; ctx.fillRect(bx - bw / 2, byy, bw, bh);
-          ctx.fillStyle = "#3a2212"; ctx.fillRect(bx - 2 * ui, byy + bh + ui, 4 * ui, 3 * ui);
-          ctx.fillText(text, bx, byy + bh / 2 + ui);
+          // bubble sits to the right of the portrait so the face stays visible
+          const bw = ctx.measureText(text).width + 12 * ui, bh = fs + 8 * ui, bxx = bx + s / 2 + pad + 6 * ui, byy = top + 2 * ui;
+          ctx.fillStyle = "#3a2212"; ctx.fillRect(bxx - ui, byy - ui, bw + 2 * ui, bh + 2 * ui);
+          ctx.fillStyle = "#fff4dc"; ctx.fillRect(bxx, byy, bw, bh);
+          ctx.fillStyle = "#3a2212"; ctx.fillRect(bxx - 4 * ui, byy + bh / 2 - 2 * ui, 4 * ui, 4 * ui);
+          ctx.fillText(text, bxx + 6 * ui, byy + bh / 2 + ui);
         }
       }
       raf = requestAnimationFrame(frame);
@@ -771,13 +791,17 @@ export function LivingTown({ className, height, preview = false }: { className?:
     // Hit radius ~20 screen px at any zoom; real agents (incl. their portrait
     // badge above the head) win over background residents.
     const radius = Math.max(8, 20 / k);
-    const r = Math.max(7, Math.min(15, k * 4.2)) / k;
+    const dpr = window.devicePixelRatio || 1;
     let best: Char | null = null, bd = radius;
     for (const c of chars.current.values()) {
       if (c.asleep && !c.path.length && c.agentId == null) continue;
       const body = Math.hypot(c.x - x, c.y - 8 - y);
-      const badge = c.agentId != null ? Math.hypot(c.x - x, c.y - 16 - r - 2 / k - y) : Infinity;
-      const d = Math.min(body, badge) - (c.agentId != null ? radius * 0.4 : 0);
+      // the portrait card: a box above the head
+      const sz = cardSize(k * dpr, dpr, c.lead) / (k * dpr);
+      const cardTop = c.y - 16 - sz - 6 / k;
+      const onCard = c.agentId != null && Math.abs(c.x - x) <= sz / 2 + 3 / k && y >= cardTop - 3 / k && y <= c.y - 16;
+      const badge = onCard ? 0 : Infinity;
+      const d = Math.min(body, badge) - (c.agentId != null ? radius * 0.4 : 0) - (onCard && c.lead ? 1 : 0);
       if (d < bd) { bd = d; best = c; }
     }
     return best;
@@ -801,7 +825,8 @@ export function LivingTown({ className, height, preview = false }: { className?:
 
   return (
     <div className={className}>
-      <div ref={wrapRef} className="relative w-full overflow-hidden rounded-xl border-4 border-[#5a3a22] shadow-panel" style={height ? { height } : undefined}>
+     <div className={preview ? "" : "flex gap-3"}>
+      <div ref={wrapRef} className="relative w-full min-w-0 flex-1 overflow-hidden rounded-xl border-4 border-[#5a3a22] shadow-panel" style={height ? { height } : undefined}>
         <canvas
           ref={canvasRef}
           className="block cursor-pointer"
@@ -894,6 +919,52 @@ export function LivingTown({ className, height, preview = false }: { className?:
           </div>
         )}
       </div>
+      {!preview && team && <CastPanel members={team.members} companies={town?.companies ?? []} selected={selected} height={height} onPick={(id) => { setSelected(id); if (cam.current.zoom < 3) cam.current.zoom = 3; }} />}
+     </div>
     </div>
+  );
+}
+
+function statusOf(m: TeamMember): string {
+  if (m.status === "paused") return "😴 Off duty";
+  if (m.waitingApproval) return "⏳ Needs your OK";
+  if (m.working) return TOOL_WORDS[m.lastTools[0] ?? ""] ?? "💼 Working";
+  const s = routineAt(agentSeed(m.id));
+  return s.kind === "venue" ? `${VENUES[s.venue].emoji} ${VENUES[s.venue].doing}` : s.kind === "home" ? "😴 Asleep at home" : "💼 At the office";
+}
+
+/** Everyone's detailed portrait, AURORA featured at the top. Click to follow them in town. */
+function CastPanel({ members, companies, selected, height, onPick }: { members: TeamMember[]; companies: TownCompany[]; selected: number | null; height?: string; onPick: (id: number) => void }) {
+  const lead = members.find((m) => m.isOverseer);
+  const rest = members.filter((m) => !m.isOverseer).sort((a, b) => Number(b.working) - Number(a.working) || a.name.localeCompare(b.name));
+  const companyName = (id: number | null) => (id == null ? "AURORA HQ" : companies.find((c) => c.id === id)?.name ?? "");
+  return (
+    <aside className={`hidden w-72 shrink-0 flex-col gap-3 overflow-y-auto p-3 lg:flex ${PANEL}`} style={{ fontFamily: PIXEL_FONT, height }}>
+      {lead && (
+        <button type="button" onClick={() => onPick(lead.id)} className="text-left">
+          <div className="rounded-lg border-4 border-[#3a2212] bg-[#f2c14e] p-1.5 shadow-[0_0_24px_rgba(242,193,78,0.6)]">
+            <IdentityAvatar name={lead.name} avatarPath={lead.avatarPath} className="aspect-square h-auto w-full rounded-md" />
+          </div>
+          <div className="mt-2 text-center text-lg font-semibold leading-tight">✦ {lead.name} ✦</div>
+          <div className="text-center text-xs opacity-80">Lead of everything · AURORA HQ</div>
+          <div className="mt-1 rounded bg-[#fff1cf] px-2 py-1 text-center text-xs">{statusOf(lead)}</div>
+          {lead.working && lead.currentTask && <p className="mt-1 line-clamp-2 text-center text-[11px] opacity-75">{lead.currentTask.replace(/^[[^]]*]:?s*/, "")}</p>}
+        </button>
+      )}
+      <div className="border-t-2 border-[#c99a5a] pt-2 text-xs font-semibold opacity-80">The team · {rest.length}</div>
+      <div className="grid grid-cols-3 gap-2">
+        {rest.map((m) => (
+          <button key={m.id} type="button" onClick={() => onPick(m.id)} title={`${m.name} — ${m.role ?? ""} · ${companyName(m.companyId)}
+${statusOf(m)}`}
+            className={`rounded-md border-[3px] p-0.5 text-center transition ${selected === m.id ? "border-[#3a2212] bg-[#fff1cf]" : "border-[#c99a5a] hover:border-[#3a2212]"}`}>
+            <div className="relative">
+              <IdentityAvatar name={m.name} avatarPath={m.avatarPath} className={`aspect-square h-auto w-full rounded ${m.status === "paused" ? "opacity-60 grayscale" : ""}`} />
+              {(m.working || m.waitingApproval) && <span className={`absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full border border-white ${m.waitingApproval ? "bg-amber-400" : "bg-emerald-400"}`} />}
+            </div>
+            <div className="mt-0.5 truncate text-[11px] font-semibold leading-tight">{m.name.split(" ")[0]}</div>
+          </button>
+        ))}
+      </div>
+    </aside>
   );
 }

@@ -37,8 +37,23 @@ const SORT_FILTERS: Record<string, string> = {
 
 export interface VideoResult { title: string; channel: string; views: string; published: string; length: string; url: string }
 
-/** Searches YouTube by reading the results page's embedded data — gives view counts, which yt-dlp's flat search doesn't. */
+/**
+ * YouTube search with fallbacks: a long, specific query combined with a
+ * sort/period filter often returns nothing at all (measured: "kids channel
+ * ages 4-8 most viewed this year" + views/month -> 0), so retry without the
+ * filter, then with just the query's first few keywords.
+ */
 export async function youtubeSearch(query: string, opts: { sort?: string; period?: string; limit?: number } = {}): Promise<VideoResult[]> {
+  const first = await youtubeSearchOnce(query, opts);
+  if (first.length) return first;
+  const relaxed = await youtubeSearchOnce(query, { limit: opts.limit });
+  if (relaxed.length) return relaxed;
+  const short = query.split(/\s+/).filter((w) => w.length > 2).slice(0, 3).join(" ");
+  return short && short !== query ? youtubeSearchOnce(short, opts) : [];
+}
+
+/** Searches YouTube by reading the results page's embedded data — gives view counts, which yt-dlp's flat search doesn't. */
+async function youtubeSearchOnce(query: string, opts: { sort?: string; period?: string; limit?: number } = {}): Promise<VideoResult[]> {
   const sort = opts.sort === "views" || opts.sort === "date" ? opts.sort : "relevance";
   const period = sort === "date" ? "any" : (["today", "week", "month"].includes(String(opts.period)) ? String(opts.period) : "any");
   const sp = SORT_FILTERS[`${sort}:${period}`] ?? "";

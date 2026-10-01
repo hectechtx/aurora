@@ -19,6 +19,8 @@ import { generateVideo, isVideoGenInstalled } from "./videogen";
 import { searchAndDownloadTrack } from "./musicsearch";
 import { webSearch, webFetch, fetchImageBytes } from "./web-tools";
 import { browseInteract, BrowserToolError, READ_ONLY_ACTIONS, type BrowseAction } from "./browser-tool";
+import { trendingVideos, youtubeSearch, videoTranscript, newsHeadlines, saveDocument, makeVoiceover, VOICE_IDS } from "./content-tools";
+import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
 import { getCreationsDir, SELF_SOURCE_DIR } from "./paths";
 
@@ -204,6 +206,67 @@ function builtinTools(): ToolDef[] {
           done: { type: "array", items: { type: "number" }, description: "0-based indexes of steps already completed" },
         },
         required: ["steps"],
+      },
+    },
+    {
+      name: "trending_videos", kind: "builtin", risk: "low",
+      description: "What's trending on YouTube right now: the most-viewed new uploads across popular categories (or the categories you give), ranked by views, with title, channel, views, length, age and URL. Use this for 'top trending videos' — YouTube's own trending page no longer exists.",
+      parameters: {
+        type: "object",
+        properties: {
+          period: { type: "string", enum: ["today", "week", "month"], description: "Upload window (default today)" },
+          categories: { type: "array", items: { type: "string" }, description: "Optional topics to cover, e.g. ['gaming','comedy']" },
+          limit: { type: "number", description: "How many (default 10, max 25)" },
+        },
+      },
+    },
+    {
+      name: "youtube_search", kind: "builtin", risk: "low",
+      description: "Search YouTube for videos on a topic, with real view counts. sort='views' + period finds the biggest recent videos on that topic.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+          sort: { type: "string", enum: ["relevance", "views", "date"] },
+          period: { type: "string", enum: ["today", "week", "month", "any"] },
+          limit: { type: "number" },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "video_transcript", kind: "builtin", risk: "low",
+      description: "Get the spoken words (captions) of a YouTube video so you can summarize or analyze it without watching it.",
+      parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
+    },
+    {
+      name: "news_headlines", kind: "builtin", risk: "low",
+      description: "Latest news headlines (Google News) — top stories, or on a topic — with source, time and link.",
+      parameters: { type: "object", properties: { topic: { type: "string", description: "Optional topic; omit for top stories" }, limit: { type: "number" } } },
+    },
+    {
+      name: "save_document", kind: "builtin", risk: "low",
+      description: "Save finished written work — a script, report, summary, or table — as a file in the owner's Library (documents folder). Use it for anything the owner will want to keep or reuse.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          content: { type: "string", description: "The full document text" },
+          format: { type: "string", enum: ["md", "txt", "csv", "html", "json"] },
+        },
+        required: ["title", "content"],
+      },
+    },
+    {
+      name: "make_voiceover", kind: "builtin", risk: "low",
+      description: "Record text as a natural-sounding voiceover audio file (local Kokoro voice) and save it to the Library — e.g. narration for a video script.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          voice: { type: "string", enum: VOICE_IDS, description: "Optional voice (default af_heart, warm female)" },
+        },
+        required: ["text"],
       },
     },
     {
@@ -463,6 +526,25 @@ async function getOtherAgents(selfId: number): Promise<Agent[]> {
 // first suggests another agent is relevant. Naming them here, once, up
 // front, is what actually makes cross-agent collaboration happen instead of
 // staying purely theoretical.
+/**
+ * Folded into AURORA's chat prompt: she's the lead, here's her team, and
+ * putting them to work is her job. Job descriptions are clipped — several are
+ * pasted-in multi-paragraph job postings that would swamp a 9B model's context.
+ */
+async function describeTeamForLead(): Promise<string> {
+  const team = (await getStorage().getAgents()).filter((a) => !a.isOverseer);
+  if (team.length === 0) return "";
+  const list = team
+    .map((a) => `- ${a.name.trim()}${a.role ? ` (${a.role})` : ""}${a.status !== "active" ? " [paused]" : ""}: ${a.jobDescription.replace(/\s+/g, " ").slice(0, 160)}`)
+    .join("\n");
+  return (
+    `\n\nYou lead a team of agents who work in the background with their own tools:\n${list}\n\n` +
+    "When the owner wants something done by someone, done regularly, or done in several stages, put the team on it instead of doing " +
+    "everything yourself: hand one job to the best-fit agent with delegate_to_agent, or build a multi-step workflow with create_pipeline " +
+    "(each step's output feeds the next; use a schedule for recurring work). Then tell the owner plainly who's on it and what happens next."
+  );
+}
+
 async function describeOtherAgents(selfId: number): Promise<string> {
   const others = await getOtherAgents(selfId);
   if (others.length === 0) return "";
@@ -577,6 +659,80 @@ async function agentCommsTools(ctx: RunContext): Promise<ToolDef[]> {
   ];
 }
 
+// Delegation + pipelines. Unlike handoff_to_agent (agent -> agent only), these
+// exist in chat too, so AURORA can actually put her team to work when the
+// owner asks — measured: asked "who's taking care of it?", she had no tool
+// that could assign anyone. Agent names are a concrete enum so a target can't
+// be hallucinated.
+async function teamworkTools(ctx: RunContext): Promise<ToolDef[]> {
+  const everyone = await getStorage().getAgents();
+  const candidates = ctx.type === "agent" ? everyone.filter((a) => a.id !== ctx.agentId) : everyone.filter((a) => !a.isOverseer);
+  if (candidates.length === 0) return [];
+  const names = candidates.map((a) => a.name.trim());
+  const tools: ToolDef[] = [
+    {
+      name: "create_pipeline", kind: "builtin", risk: "low",
+      description:
+        "Build a multi-agent workflow: an ordered list of steps, each given to one agent with an instruction. Each step's finished output is " +
+        "handed to the next step automatically, and the last step's output goes to the owner (Outbox + this chat). Use this whenever the owner " +
+        "wants recurring or multi-part work done by the team (e.g. step 1 research trends, step 2 summarize top 10, step 3 write scripts). " +
+        "Pick the agent whose job fits each step. Set schedule to 'daily'/'hourly'/'weekly' for recurring work, or 'none' to run only on demand. " +
+        "Saving a pipeline with an existing name replaces it.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Short name, e.g. 'Daily trending scripts'" },
+          steps: {
+            type: "array",
+            description: "Ordered steps (max 8)",
+            items: {
+              type: "object",
+              properties: {
+                agent: { type: "string", enum: names, description: "Agent who does this step" },
+                instruction: { type: "string", description: "Exactly what this step must produce" },
+              },
+              required: ["agent", "instruction"],
+            },
+          },
+          schedule: { type: "string", enum: ["none", "hourly", "daily", "weekly"], description: "How often it re-runs on its own" },
+          run_now: { type: "boolean", description: "Start a run right away (default true)" },
+        },
+        required: ["name", "steps"],
+      },
+    },
+    {
+      name: "run_pipeline", kind: "builtin", risk: "low",
+      description: "Start an existing pipeline now, optionally with extra input for its first step.",
+      parameters: { type: "object", properties: { name: { type: "string" }, input: { type: "string" } }, required: ["name"] },
+    },
+    {
+      name: "list_pipelines", kind: "builtin", risk: "low",
+      description: "List the team's saved pipelines with their steps, schedule, and latest run status.",
+      parameters: { type: "object", properties: {} },
+    },
+  ];
+  if (ctx.type === "task") {
+    tools.unshift({
+      name: "delegate_to_agent", kind: "builtin", risk: "low", contexts: ["task"],
+      description:
+        "Hand a single job to one of your agents. They work it in the background with their own tools, and their result is posted back into " +
+        "this chat when they're done. Use this when the owner asks you to get someone on something. For multi-step or recurring work across " +
+        "several agents, use create_pipeline instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          agent: { type: "string", enum: names, description: "Who should do it" },
+          instruction: { type: "string", description: "What they need to do, with all the context they need" },
+        },
+        required: ["agent", "instruction"],
+      },
+    });
+  }
+  return tools;
+}
+
+const SYSTEM_TOOLS = new Set(["run_shell", "run_node", "run_python", "write_file", "edit_file"]);
+
 // When advancedToolsEnabled is off, no risk:"high" tool is even offered to
 // the model — not just gated behind approval. That covers the built-in
 // run_shell/run_node/run_python trio and any skill tool a skill author
@@ -585,8 +741,17 @@ async function agentCommsTools(ctx: RunContext): Promise<ToolDef[]> {
 // low/medium-risk skill tools) still works.
 async function allTools(ctx: RunContext, advancedToolsEnabled: boolean): Promise<ToolDef[]> {
   const builtins = builtinTools().filter((t) => !t.contexts || t.contexts.includes(ctx.type));
-  const [skills, comms] = await Promise.all([skillTools(), agentCommsTools(ctx)]);
-  const all = [...builtins, ...skills, ...comms];
+  const [skills, comms, teamwork] = await Promise.all([skillTools(), agentCommsTools(ctx), teamworkTools(ctx)]);
+  let all = [...builtins, ...teamwork, ...skills, ...comms];
+  // Least privilege: background agents don't get the machine. Shell, code,
+  // and file-writing tools are only for AURORA (chat, or the overseer agent)
+  // and agents whose role is an engineer — a content writer has no business
+  // running PowerShell, and a prompt-injected web page shouldn't find one.
+  if (ctx.type === "agent") {
+    const self = await getStorage().getAgent(ctx.agentId);
+    const trusted = !!self && (self.isOverseer || /engineer|developer|coder/i.test(self.role ?? ""));
+    if (!trusted) all = all.filter((t) => !SYSTEM_TOOLS.has(t.name));
+  }
   return advancedToolsEnabled ? all : all.filter((t) => t.risk !== "high");
 }
 
@@ -626,6 +791,42 @@ function toolsForTurn(tools: ToolDef[], messages: OllamaMessage[], transcript: T
     .map((s) => s.t);
   const chosenSkills = new Set(scored);
   return tools.filter((t) => t.kind !== "skill" || chosenSkills.has(t));
+}
+
+// Code/commands that can destroy data or the system. In "autonomous" mode
+// these are the ONLY tool calls that still stop for the owner — everything
+// else (browsing, clicking, generating, writing files, ordinary shell work)
+// just runs. Matched against the call's whole argument text, so it covers
+// run_shell commands as well as run_node/run_python code.
+const DESTRUCTIVE = new RegExp([
+  String.raw`\brm\s`, String.raw`\brmdir\b`, String.raw`\brd\s+/s`, String.raw`\bdel\s`, String.raw`\berase\s`,
+  String.raw`Remove-Item`, String.raw`Clear-Content`, String.raw`\bformat\s+[a-z]:`, String.raw`diskpart`, String.raw`mkfs`,
+  String.raw`\bdd\s+if=`, String.raw`shutdown`, String.raw`Restart-Computer`, String.raw`Stop-Computer`, String.raw`bcdedit`,
+  String.raw`reg(\.exe)?\s+delete`, String.raw`Remove-ItemProperty`, String.raw`Set-ExecutionPolicy`, String.raw`cipher\s+/w`,
+  String.raw`git\s+push\b.*(--force|-f\b)`, String.raw`git\s+reset\s+--hard`, String.raw`git\s+clean\b`,
+  String.raw`\b(rmSync|unlinkSync|rmdirSync)\b`, String.raw`fs\.(promises\.)?(rm|unlink|rmdir)\b`,
+  String.raw`shutil\.rmtree`, String.raw`os\.(remove|unlink|rmdir)\b`, String.raw`\bDROP\s+(TABLE|DATABASE)\b`,
+  String.raw`\btaskkill\b`, String.raw`Stop-Process`,
+].join("|"), "i");
+
+/**
+ * Whether this call has to wait in Approvals.
+ * - manual: everything waits.
+ * - supervised: only low-risk tools run on their own.
+ * - autonomous: everything runs except destructive code/commands.
+ * browse_interact made of only goto/scroll/wait is just reading, so it's low
+ * risk whatever the mode — measured: 6 of 7 approvals in one real session
+ * were scroll-only browse_interact calls.
+ */
+function needsApproval(tool: ToolDef, args: Record<string, unknown>, config: AgentConfig): boolean {
+  if (config.autonomy === "manual") return true;
+  let risk = tool.risk;
+  if (tool.name === "browse_interact") {
+    const actions = Array.isArray(args.actions) ? args.actions as { type?: string }[] : [];
+    if (actions.every((a) => READ_ONLY_ACTIONS.has(String(a?.type) as BrowseAction["type"]))) risk = "low";
+  }
+  if (config.autonomy === "autonomous") return DESTRUCTIVE.test(JSON.stringify(args));
+  return risk !== "low";
 }
 
 function toOllamaTools(tools: ToolDef[]): OllamaToolDef[] {
@@ -669,7 +870,7 @@ async function updateMessage(ctx: RunContext, messageId: number, content: string
 }
 
 /** Called once, after runLoop resolves, by every entrypoint (fresh turn or resumed approval) — the single place task/queue-item status gets updated. */
-async function finalizeContext(ctx: RunContext, status: TurnResult["status"]): Promise<void> {
+async function finalizeContext(ctx: RunContext, status: TurnResult["status"], reply = ""): Promise<void> {
   const storage = getStorage();
   clearRunControl(ctx);
   if (ctx.type === "task") {
@@ -678,8 +879,19 @@ async function finalizeContext(ctx: RunContext, status: TurnResult["status"]): P
     await storage.updateQueueItem(ctx.queueItemId, { status: "awaiting_approval" });
   } else {
     await storage.updateQueueItem(ctx.queueItemId, { status: status === "error" ? "error" : "done", doneAt: Date.now() });
+    // Advance a pipeline / report delegated work back to its chat. Lives here
+    // (not just in runAgentTick) so items that finish after an approval —
+    // via finishResumeAfterApproval — move their pipeline along too.
+    await onQueueItemFinished(ctx.queueItemId, status === "error" ? "error" : "final", reply)
+      .catch((err) => storage.log("pipeline advance failed", err instanceof Error ? err.message : String(err), "error").catch(() => {}));
   }
 }
+
+setPipelineNudge((agentId) => {
+  runAgentTick(agentId).catch((err) => {
+    getStorage().log("pipeline nudge failed", err instanceof Error ? err.message : String(err), "error").catch(() => {});
+  });
+});
 
 async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: RunContext, config: AgentConfig, transcript: ToolCallRecord[], messageId: number): Promise<{ ok: boolean; output: string }> {
   const storage = getStorage();
@@ -1004,6 +1216,86 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
           creationId: null,
         });
         return { ok: true, output: `Asked the owner (Outbox #${deliverable.id}). You'll get their answer back on a later turn — carry on with anything else you can in the meantime.` };
+      }
+      case "trending_videos":
+      case "youtube_search": {
+        const vids = tool.name === "trending_videos"
+          ? await trendingVideos({
+            period: String(args.period ?? "today"),
+            categories: Array.isArray(args.categories) ? args.categories.map(String) : undefined,
+            limit: Number(args.limit) || 10,
+          })
+          : await youtubeSearch(String(args.query ?? ""), { sort: String(args.sort ?? "relevance"), period: String(args.period ?? "any"), limit: Number(args.limit) || 10 });
+        if (vids.length === 0) return { ok: true, output: "no videos found" };
+        return { ok: true, output: vids.map((v, i) => `${i + 1}. ${v.title} — ${v.channel} (${v.views}, ${v.length}, ${v.published}) ${v.url}`).join("\n") };
+      }
+      case "video_transcript": {
+        const t = await videoTranscript(String(args.url ?? ""));
+        return { ok: true, output: `${t.title}\n\n${t.text}` };
+      }
+      case "news_headlines": {
+        const items = await newsHeadlines(args.topic ? String(args.topic) : undefined, Number(args.limit) || 10);
+        if (items.length === 0) return { ok: true, output: "no headlines found" };
+        return { ok: true, output: items.map((h, i) => `${i + 1}. ${h.title} (${h.source}, ${h.published}) ${h.url}`).join("\n") };
+      }
+      case "save_document": {
+        const file = saveDocument(String(args.title ?? "document"), String(args.content ?? ""), String(args.format ?? "md"));
+        return { ok: true, output: `saved to ${file}` };
+      }
+      case "make_voiceover": {
+        const text = String(args.text ?? "").trim();
+        if (!text) return { ok: false, output: "text is required" };
+        const { filename, voice } = await makeVoiceover(text, args.voice ? String(args.voice) : undefined);
+        await storage.createCreation({
+          taskId: ctx.type === "task" ? ctx.taskId : undefined, agentId: memoryAgentId ?? undefined,
+          kind: "audio", prompt: text.slice(0, 500), filePath: filename, title: `Voiceover (${voice})`,
+        });
+        return { ok: true, output: `voiceover saved to the Library as ${filename} (voice ${voice})` };
+      }
+      case "delegate_to_agent": {
+        if (ctx.type !== "task") return { ok: false, output: "delegate_to_agent is for chats — agents use handoff_to_agent" };
+        const agent = findAgentByName(await storage.getAgents(), String(args.agent ?? ""));
+        const instruction = String(args.instruction ?? "").trim();
+        if (!agent) return { ok: false, output: `no agent named "${args.agent}"` };
+        if (!instruction) return { ok: false, output: "an instruction is required" };
+        if (agent.status !== "active") return { ok: false, output: `${agent.name.trim()} is paused — ask the owner to resume them on the Team page` };
+        await storage.createQueueItem(agent.id, `[Delegated by AURORA from the owner's chat]: ${instruction}`, { originTaskId: ctx.taskId });
+        await storage.log(`delegated: ${agent.name.trim()}`, instruction.slice(0, 200));
+        runAgentTick(agent.id).catch(() => {});
+        return { ok: true, output: `${agent.name.trim()} has it and is starting now; their result will be posted in this chat when they're done.` };
+      }
+      case "create_pipeline": {
+        const rawSteps = Array.isArray(args.steps) ? args.steps as { agent?: string; instruction?: string }[] : [];
+        const saved = await upsertPipeline({
+          name: String(args.name ?? ""),
+          stages: rawSteps.map((s) => ({ agent: String(s?.agent ?? ""), instruction: String(s?.instruction ?? "") })),
+          schedule: args.schedule ?? "none",
+          originTaskId: ctx.type === "task" ? ctx.taskId : null,
+        });
+        if (!saved.ok) return { ok: false, output: saved.message };
+        const summary = await summarizePipeline(saved.pipeline);
+        if (args.run_now === false) return { ok: true, output: `saved pipeline ${summary}` };
+        const started = await startPipelineRun(saved.pipeline.id, { originTaskId: ctx.type === "task" ? ctx.taskId : null });
+        return { ok: started.ok, output: `saved pipeline ${summary}. ${started.message}` };
+      }
+      case "run_pipeline": {
+        const name = String(args.name ?? "").trim().toLowerCase();
+        const pipeline = (await storage.getPipelines()).find((p) => p.name.toLowerCase() === name);
+        if (!pipeline) return { ok: false, output: `no pipeline named "${args.name}" — use list_pipelines` };
+        const started = await startPipelineRun(pipeline.id, {
+          input: args.input ? String(args.input) : undefined,
+          originTaskId: ctx.type === "task" ? ctx.taskId : null,
+        });
+        return { ok: started.ok, output: started.message };
+      }
+      case "list_pipelines": {
+        const all = await storage.getPipelines();
+        if (all.length === 0) return { ok: true, output: "no pipelines yet" };
+        const lines = await Promise.all(all.map(async (p) => {
+          const [latest] = await storage.getPipelineRuns(p.id, 1);
+          return `- ${await summarizePipeline(p)}${latest ? ` — last run ${latest.status}` : " — never run"}`;
+        }));
+        return { ok: true, output: lines.join("\n") };
       }
       case "handoff_to_agent":
       case "message_agent": {
@@ -1370,7 +1662,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
       continue;
     }
 
-    const autoRun = tool.risk === "low" && config.autonomy === "supervised";
+    const autoRun = !needsApproval(tool, args, config);
     if (!autoRun) {
       const pendingTranscript = [...transcript, { name, args, risk: tool.risk, status: "pending" as const, result: "awaiting owner approval" }];
       await updateMessage(ctx, messageId, "", JSON.stringify(pendingTranscript), thinking);
@@ -1457,7 +1749,7 @@ export async function runAgentTurn(taskId: number, userMessage: string, imageCre
   }
 
   const ctx: RunContext = { type: "task", taskId };
-  const systemPrompt = config.systemPrompt + TOOL_USE_REMINDER + await knowledgeInstructions();
+  const systemPrompt = config.systemPrompt + await describeTeamForLead() + TOOL_USE_REMINDER + await knowledgeInstructions();
   getRunControl(ctx); // ensure a Stop click has something to find even before the first tool call
   runTaskTurnLoop(ctx, taskId, config, systemPrompt)
     .catch((err) => storage.log("task turn failed", err instanceof Error ? err.message : String(err), "error").catch(() => {}));
@@ -1621,7 +1913,7 @@ export async function runAgentTick(agentId: number): Promise<TurnResult | { skip
     const messageId = await createPlaceholderMessage(ctx);
     getRunControl(ctx); // ensure a Stop click has something to find even before the first tool call
     const result = await runLoop(ctx, messages, config, [], 0, messageId);
-    await finalizeContext(ctx, result.status);
+    await finalizeContext(ctx, result.status, result.reply);
     // Auto work log: every finished queue item leaves a one-note trail of
     // what was asked and what came of it, recallable later — Memory as a
     // history of everything the agent has actually done, not only what it
@@ -1721,6 +2013,6 @@ export async function finishResumeAfterApproval(prepared: PreparedResume, decisi
 
   await updateMessage(ctx, messageId, "", JSON.stringify(transcript));
   const result = await runLoop(ctx, messages, config, transcript, 0, messageId);
-  await finalizeContext(ctx, result.status);
+  await finalizeContext(ctx, result.status, result.reply);
   return result;
 }

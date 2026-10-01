@@ -1,7 +1,9 @@
 import {
   tasks, chatMessages, installedSkills, approvals, auditLog, agentConfig, notes, creations,
   agents, agentLogEntries, agentQueueItems, agentRecurringTasks, deliverables, taskAgents, agentRelationships, projects,
+  pipelines, pipelineRuns,
 } from "@shared/schema";
+import type { Pipeline, PipelineRun } from "@shared/schema";
 import type {
   Task, ChatMessage, InstalledSkill, InsertInstalledSkill, Approval, AuditEntry, AgentConfig, Note, Creation,
   Agent, AgentLogEntry, AgentQueueItem, AgentRecurringTask, Deliverable, TaskAgent, AgentRelationship,
@@ -12,7 +14,7 @@ import Database from "better-sqlite3";
 import { eq, desc, asc, gt, lt, isNull, isNotNull, and, inArray } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
-import type { Storage } from "./storage-types";
+import type { Storage, QueueItemOpts } from "./storage-types";
 import { DB_PATH, DATA_DIR, getCreationsDir, SELF_SOURCE_DIR } from "./paths";
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -145,6 +147,11 @@ for (const stmt of [
   "ALTER TABLE agents ADD COLUMN spawned_by_agent_id INTEGER",
   "ALTER TABLE agents ADD COLUMN preferred_model TEXT",
   "ALTER TABLE agent_config ADD COLUMN num_ctx INTEGER NOT NULL DEFAULT 8192",
+  "ALTER TABLE agent_queue_items ADD COLUMN pipeline_run_id INTEGER",
+  "ALTER TABLE agent_queue_items ADD COLUMN stage_index INTEGER",
+  "ALTER TABLE agent_queue_items ADD COLUMN origin_task_id INTEGER",
+  "CREATE TABLE IF NOT EXISTS pipelines (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', stages TEXT NOT NULL, schedule_minutes INTEGER, active INTEGER NOT NULL DEFAULT 1, last_run_at INTEGER, origin_task_id INTEGER, created_at INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS pipeline_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, pipeline_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'running', stage_index INTEGER NOT NULL DEFAULT 0, origin_task_id INTEGER, output TEXT, started_at INTEGER NOT NULL, finished_at INTEGER)",
 ]) {
   try { sqlite.exec(stmt); } catch { /* column already exists */ }
 }
@@ -655,7 +662,11 @@ export class DatabaseStorage implements Storage {
       WHERE id = (
         SELECT id FROM agent_queue_items
         WHERE agent_id = ? AND status = 'pending'
-        ORDER BY id LIMIT 1
+        -- Work someone is waiting on (a pipeline step, a job delegated from
+        -- chat, a teammate's handoff) jumps ahead of routine/recurring chores,
+        -- so a pipeline doesn't stall behind a backlog of self-assigned work.
+        ORDER BY (pipeline_run_id IS NULL AND origin_task_id IS NULL AND source_agent_id IS NULL), id
+        LIMIT 1
       )
       RETURNING *
     `).get(agentId) as Record<string, unknown> | undefined;
@@ -669,14 +680,69 @@ export class DatabaseStorage implements Storage {
       doneAt: row.done_at as number | null,
       sourceAgentId: row.source_agent_id as number | null,
       handoffDepth: row.handoff_depth as number,
+      pipelineRunId: (row.pipeline_run_id as number | null) ?? null,
+      stageIndex: (row.stage_index as number | null) ?? null,
+      originTaskId: (row.origin_task_id as number | null) ?? null,
     };
   }
 
-  async createQueueItem(agentId: number, content: string, opts?: { sourceAgentId?: number; handoffDepth?: number }): Promise<AgentQueueItem> {
+  async createQueueItem(agentId: number, content: string, opts?: QueueItemOpts): Promise<AgentQueueItem> {
     const [row] = await db.insert(agentQueueItems).values({
       agentId, content, status: "pending", createdAt: Date.now(),
       sourceAgentId: opts?.sourceAgentId, handoffDepth: opts?.handoffDepth ?? 0,
+      pipelineRunId: opts?.pipelineRunId, stageIndex: opts?.stageIndex, originTaskId: opts?.originTaskId,
     }).returning();
+    return row;
+  }
+
+  async getQueueItem(id: number): Promise<AgentQueueItem | undefined> {
+    const [row] = await db.select().from(agentQueueItems).where(eq(agentQueueItems.id, id));
+    return row;
+  }
+
+  // ---- Pipelines ----
+  async getPipelines(): Promise<Pipeline[]> {
+    return db.select().from(pipelines).orderBy(asc(pipelines.id));
+  }
+
+  async getPipeline(id: number): Promise<Pipeline | undefined> {
+    const [row] = await db.select().from(pipelines).where(eq(pipelines.id, id));
+    return row;
+  }
+
+  async createPipeline(input: { name: string; description?: string; stages: string; scheduleMinutes: number | null; originTaskId?: number | null }): Promise<Pipeline> {
+    const [row] = await db.insert(pipelines).values({
+      name: input.name, description: input.description ?? "", stages: input.stages, scheduleMinutes: input.scheduleMinutes,
+      active: true, originTaskId: input.originTaskId ?? null, createdAt: Date.now(),
+    }).returning();
+    return row;
+  }
+
+  async updatePipeline(id: number, patch: Partial<Pick<Pipeline, "name" | "description" | "stages" | "scheduleMinutes" | "active" | "lastRunAt">>): Promise<Pipeline | undefined> {
+    const [row] = await db.update(pipelines).set(patch).where(eq(pipelines.id, id)).returning();
+    return row;
+  }
+
+  async deletePipeline(id: number): Promise<void> {
+    await db.delete(pipelines).where(eq(pipelines.id, id));
+  }
+
+  async createPipelineRun(pipelineId: number, originTaskId: number | null): Promise<PipelineRun> {
+    const [row] = await db.insert(pipelineRuns).values({ pipelineId, status: "running", stageIndex: 0, originTaskId, startedAt: Date.now() }).returning();
+    return row;
+  }
+
+  async getPipelineRun(id: number): Promise<PipelineRun | undefined> {
+    const [row] = await db.select().from(pipelineRuns).where(eq(pipelineRuns.id, id));
+    return row;
+  }
+
+  async getPipelineRuns(pipelineId: number, limit = 5): Promise<PipelineRun[]> {
+    return db.select().from(pipelineRuns).where(eq(pipelineRuns.pipelineId, pipelineId)).orderBy(desc(pipelineRuns.id)).limit(limit);
+  }
+
+  async updatePipelineRun(id: number, patch: Partial<Pick<PipelineRun, "status" | "stageIndex" | "output" | "finishedAt">>): Promise<PipelineRun | undefined> {
+    const [row] = await db.update(pipelineRuns).set(patch).where(eq(pipelineRuns.id, id)).returning();
     return row;
   }
 

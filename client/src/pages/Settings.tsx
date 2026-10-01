@@ -250,8 +250,8 @@ export default function Settings() {
 
       <Card id="autonomy" className="p-5 space-y-3 scroll-mt-16">
         <h2 className="text-sm font-medium">Autonomy</h2>
-        <div className="grid grid-cols-2 gap-2">
-          {(["manual", "supervised"] as const).map((mode) => (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {(["manual", "supervised", "autonomous"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => updateConfig.mutate({ autonomy: mode })}
@@ -263,7 +263,11 @@ export default function Settings() {
             >
               <div className="text-sm font-medium capitalize">{mode}</div>
               <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                {mode === "manual" ? "Every tool call waits for your approval." : "Low-risk tools auto-run; shell/skill-install/high-risk still wait."}
+                {mode === "manual"
+                  ? "Every tool call waits for your approval."
+                  : mode === "supervised"
+                    ? "Low-risk tools auto-run; clicking in sites, shell and other higher-risk tools wait."
+                    : "Everything runs on its own — browsing, clicking, files, shell. Only destructive commands (deleting files, formatting, force-push) still wait."}
               </div>
             </button>
           ))}

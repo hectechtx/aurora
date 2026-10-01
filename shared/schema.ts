@@ -257,6 +257,39 @@ export const agentQueueItems = sqliteTable("agent_queue_items", {
   // top-level item). handoff_to_agent refuses to create depth > 4, so a
   // ping-pong loop between agents can't run away indefinitely.
   handoffDepth: integer("handoff_depth").notNull().default(0),
+  // Set when this item is one stage of a pipeline run (see pipelines below).
+  pipelineRunId: integer("pipeline_run_id"),
+  stageIndex: integer("stage_index"),
+  // The Task (chat) that asked for this work, so the result can be posted
+  // back there when it's done — delegation from chat, or a pipeline's last stage.
+  originTaskId: integer("origin_task_id"),
+});
+
+// A reusable multi-agent workflow: an ordered chain of stages, each one
+// agent + instruction. Each stage's output is handed to the next stage as its
+// input; the last stage's output goes to the Outbox (and back to the chat
+// that started it, if any). Optionally re-runs on a schedule.
+export const pipelines = sqliteTable("pipelines", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  stages: text("stages").notNull(), // JSON: PipelineStage[]
+  scheduleMinutes: integer("schedule_minutes"), // null = only runs when asked
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  lastRunAt: integer("last_run_at"),
+  originTaskId: integer("origin_task_id"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const pipelineRuns = sqliteTable("pipeline_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  pipelineId: integer("pipeline_id").notNull(),
+  status: text("status").notNull().default("running"), // running | done | error
+  stageIndex: integer("stage_index").notNull().default(0),
+  originTaskId: integer("origin_task_id"),
+  output: text("output"),
+  startedAt: integer("started_at").notNull(),
+  finishedAt: integer("finished_at"),
 });
 
 // A standing instruction that re-adds itself to an agent's queue on its own
@@ -303,7 +336,7 @@ export const agentConfig = sqliteTable("agent_config", {
     "ones and ones contributed by installed skills. Say what you're about to do before doing it, " +
     "and never assume a destructive or irreversible action is fine just because a tool exists for it.",
   ),
-  autonomy: text("autonomy").notNull().default("supervised"), // manual | supervised
+  autonomy: text("autonomy").notNull().default("supervised"), // manual | supervised | autonomous
   // Context window (num_ctx) sent to Ollama. Default 8192 is the safe value —
   // the model's own advertised window (often 128K) would balloon a small model
   // to many GB of KV-cache and can freeze a 16GB machine. Higher = more the
@@ -546,7 +579,7 @@ export const agentConfigUpdateSchema = z.object({
   ollamaHost: z.string().min(3).max(300).optional(),
   model: z.string().max(200).optional(),
   systemPrompt: z.string().max(4000).optional(),
-  autonomy: z.enum(["manual", "supervised"]).optional(),
+  autonomy: z.enum(["manual", "supervised", "autonomous"]).optional(),
   // Bounded hard: 2048 floor keeps enough room to be useful; 32768 ceiling is
   // as high as an 8B model on a 16GB/8GB machine can go before risking the
   // freeze the default was chosen to avoid. Snapped to multiples of 1024.
@@ -648,6 +681,9 @@ export type AgentRelationship = typeof agentRelationships.$inferSelect;
 export type AgentLogEntry = typeof agentLogEntries.$inferSelect;
 export type InsertAgentLogEntry = z.infer<typeof insertAgentLogEntrySchema>;
 export type AgentQueueItem = typeof agentQueueItems.$inferSelect;
+export type Pipeline = typeof pipelines.$inferSelect;
+export type PipelineRun = typeof pipelineRuns.$inferSelect;
+export interface PipelineStage { agentId: number; instruction: string }
 export type InsertAgentQueueItem = z.infer<typeof insertAgentQueueItemSchema>;
 export type AgentRecurringTask = typeof agentRecurringTasks.$inferSelect;
 export type InsertAgentRecurringTask = z.infer<typeof insertAgentRecurringTaskSchema>;

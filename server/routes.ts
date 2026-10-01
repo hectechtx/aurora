@@ -50,6 +50,8 @@ import {
 import { getCreationsDir, setCreationsDir, getMusicDir, setMusicDir, getDownloadsDir, UPDATE_SOURCE_DIR } from "./paths";
 import { getElectronApis } from "./electron-bridge";
 import { listBrowserSessions, showBrowserSession, closeBrowserSession } from "./browser-tool";
+import { parseStages, describeSchedule, parseSchedule, upsertPipeline, startPipelineRun } from "./pipelines";
+import { recentChatter } from "./world";
 import { log } from "./app";
 
 /** Parses a route :id param, writing a 400 and returning null if it isn't a real integer — a malformed/non-numeric id would otherwise flow into a Drizzle query as NaN. */
@@ -673,6 +675,65 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
     res.json(rels.map((r) => ({ ...r, otherAgentName: nameById.get(r.otherAgentId) ?? "unknown" })));
   });
 
+  // ---- Pipelines (multi-agent workflows; see pipelines.ts) ----
+  app.get("/api/pipelines", async (_req, res) => {
+    const [all, agentsList] = await Promise.all([storage().getPipelines(), storage().getAgents()]);
+    const byId = new Map(agentsList.map((a) => [a.id, a] as const));
+    res.json(await Promise.all(all.map(async (p) => {
+      const runs = await storage().getPipelineRuns(p.id, 5);
+      return {
+        ...p,
+        stages: parseStages(p).map((s) => ({ ...s, agentName: byId.get(s.agentId)?.name.trim() ?? "(deleted agent)", avatarPath: byId.get(s.agentId)?.avatarPath ?? null })),
+        scheduleLabel: describeSchedule(p.scheduleMinutes),
+        runs: runs.map((r) => ({ id: r.id, status: r.status, stageIndex: r.stageIndex, startedAt: r.startedAt, finishedAt: r.finishedAt, output: r.output?.slice(0, 600) ?? null })),
+      };
+    })));
+  });
+
+  app.post("/api/pipelines", async (req, res) => {
+    const body = req.body as { name?: string; description?: string; stages?: { agentId?: number; agent?: string; instruction?: string }[]; schedule?: unknown; runNow?: boolean };
+    const agentsList = await storage().getAgents();
+    const saved = await upsertPipeline({
+      name: String(body.name ?? ""),
+      description: body.description,
+      stages: (body.stages ?? []).map((s) => ({
+        agent: s.agent ?? agentsList.find((a) => a.id === s.agentId)?.name ?? "",
+        instruction: String(s.instruction ?? ""),
+      })),
+      schedule: body.schedule ?? "none",
+      originTaskId: null,
+    });
+    if (!saved.ok) return res.status(400).json({ message: saved.message });
+    if (body.runNow) await startPipelineRun(saved.pipeline.id);
+    res.json(saved.pipeline);
+  });
+
+  app.patch("/api/pipelines/:id", async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    const body = req.body as { active?: boolean; schedule?: unknown };
+    const patch: { active?: boolean; scheduleMinutes?: number | null } = {};
+    if (typeof body.active === "boolean") patch.active = body.active;
+    if (body.schedule !== undefined) patch.scheduleMinutes = parseSchedule(body.schedule);
+    const updated = await storage().updatePipeline(id, patch);
+    if (!updated) return res.status(404).json({ message: "Pipeline not found." });
+    res.json(updated);
+  });
+
+  app.delete("/api/pipelines/:id", async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    await storage().deletePipeline(id);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/pipelines/:id/run", async (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    const r = await startPipelineRun(id, { input: typeof req.body?.input === "string" ? req.body.input : undefined });
+    res.status(r.ok ? 200 : 400).json(r);
+  });
+
   // Everything the live Team view needs in one poll: each agent's state, who's
   // mid-turn right now, their latest activity, queue depth, and relationships.
   app.get("/api/team", async (_req, res) => {
@@ -710,7 +771,25 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
         relationships: rels.map((r) => ({ otherAgentId: r.otherAgentId, sentiment: r.sentiment, interactions: r.interactions })),
       };
     }));
-    res.json({ members, pendingApprovals: approvals.filter((p) => p.status === "pending").length });
+    // Who just passed work to whom — drives agents "walking over" to each
+    // other in the World view. Recent queue items that came from another
+    // agent (handoffs, pipeline steps) within the last 90s.
+    const now = Date.now();
+    const recentHandoffs: { fromAgentId: number; toAgentId: number; at: number }[] = [];
+    await Promise.all(all.map(async (a) => {
+      for (const q of await storage().getAgentQueue(a.id)) {
+        if (q.sourceAgentId != null && now - q.createdAt < 90_000) recentHandoffs.push({ fromAgentId: q.sourceAgentId, toAgentId: a.id, at: q.createdAt });
+      }
+    }));
+    const pipelineFlows: { pipelineName: string; stage: number; stages: number; agentId: number; prevAgentId: number | null }[] = [];
+    for (const p of await storage().getPipelines()) {
+      const [run] = await storage().getPipelineRuns(p.id, 1);
+      if (run?.status !== "running") continue;
+      const stages = parseStages(p);
+      const cur = stages[run.stageIndex];
+      if (cur) pipelineFlows.push({ pipelineName: p.name, stage: run.stageIndex + 1, stages: stages.length, agentId: cur.agentId, prevAgentId: run.stageIndex > 0 ? stages[run.stageIndex - 1].agentId : null });
+    }
+    res.json({ members, pendingApprovals: approvals.filter((p) => p.status === "pending").length, recentHandoffs, pipelineFlows, chatter: recentChatter(90_000) });
   });
 
   app.post("/api/agents/:id/run", async (req, res) => {

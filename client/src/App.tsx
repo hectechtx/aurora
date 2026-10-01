@@ -20,6 +20,7 @@ import Browser from "@/pages/Browser";
 import GodsEye from "@/pages/GodsEye";
 import Agents from "@/pages/Agents";
 import Team from "@/pages/Team";
+import Pipelines from "@/pages/Pipelines";
 import Outbox from "@/pages/Outbox";
 import Skills from "@/pages/Skills";
 import Approvals from "@/pages/Approvals";
@@ -41,6 +42,7 @@ export default function App() {
                     <Switch>
                       <Route path="/" component={Home} />
                       <Route path="/team" component={Team} />
+                      <Route path="/pipelines" component={Pipelines} />
                       <Route path="/agents" component={Agents} />
                       <Route path="/generate" component={Generate} />
                       <Route path="/tasks" component={Tasks} />

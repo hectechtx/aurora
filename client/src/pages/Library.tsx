@@ -11,8 +11,9 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { AuthedImage } from "@/components/ui/AuthedImage";
 import { AuthedVideo } from "@/components/ui/AuthedVideo";
+import { AuthedAudio } from "@/components/ui/AuthedAudio";
 import { MediaModal } from "@/components/ui/MediaModal";
-import { Image as ImageIcon, Download, Trash2, Search, FileText, ArrowUpRight, FolderCode, FolderOpen, RotateCcw, Trash } from "lucide-react";
+import { Image as ImageIcon, Download, Trash2, Search, FileText, ArrowUpRight, FolderCode, FolderOpen, RotateCcw, Trash, AudioLines } from "lucide-react";
 
 interface Creation { id: number; taskId: number | null; agentId: number | null; kind: string; prompt: string; title: string | null; filePath: string; createdAt: number; deletedAt: number | null; }
 interface Deliverable { id: number; agentId: number; title: string; description: string; body: string; creationId: number | null; status: string; createdAt: number; }
@@ -206,6 +207,12 @@ export default function Library() {
                 {c.kind === "project" && (
                   <div className="aspect-square bg-surface flex items-center justify-center">
                     <FolderCode size={28} className="text-muted-foreground/50" />
+                  </div>
+                )}
+                {c.kind === "audio" && (
+                  <div className="aspect-square bg-surface flex flex-col items-center justify-center gap-3 p-3" onClick={(e) => e.stopPropagation()}>
+                    <AudioLines size={28} className="text-muted-foreground/50" />
+                    <AuthedAudio src={`/creations/${c.filePath}`} className="w-full" />
                   </div>
                 )}
                 <div className="p-2.5">

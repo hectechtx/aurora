@@ -135,6 +135,14 @@ export function salvageTextToolCalls(message: OllamaMessage | undefined, knownTo
 export function stripStrayToolJson(text: string): string {
   let out = text;
   let removed = false;
+  // XML-ish pseudo calls some models write instead of calling (measured in a
+  // pipeline's final script): <function_calls>…</function_calls>,
+  // <tool_call>…</tool_call>, often inside a ```xml fence.
+  const xmlCall = /```[a-z]*\s*<(function_calls|tool_call|tool_calls)>[\s\S]*?(<\/\1>\s*)?```|<(function_calls|tool_call|tool_calls)>[\s\S]*?<\/\3>/gi;
+  if (xmlCall.test(out)) {
+    out = out.replace(xmlCall, "");
+    removed = true;
+  }
   const re = /\{\s*"name"\s*:\s*"[^"]*"(?:[^{}]|\{[^{}]*\})*\}/g;
   out = out.replace(re, (block) => {
     try {

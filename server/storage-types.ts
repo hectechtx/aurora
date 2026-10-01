@@ -1,8 +1,17 @@
 import type {
   Task, InsertTask, ChatMessage, InstalledSkill, InsertInstalledSkill, Approval, AuditEntry,
   AgentConfig, Note, Creation, Agent, AgentLogEntry, AgentQueueItem, AgentRecurringTask, Deliverable, TaskAgent, AgentRelationship,
-  Project, ProjectCreateInput, ProjectUpdateInput,
+  Project, ProjectCreateInput, ProjectUpdateInput, Pipeline, PipelineRun,
 } from "@shared/schema";
+
+/** Extra provenance for a queue item: who handed it over, which pipeline stage it is, and which chat to report back to. */
+export interface QueueItemOpts {
+  sourceAgentId?: number;
+  handoffDepth?: number;
+  pipelineRunId?: number;
+  stageIndex?: number;
+  originTaskId?: number;
+}
 
 export interface AppStats {
   sessions: number;
@@ -115,7 +124,17 @@ export interface Storage {
   getAgentConversations(limit?: number): Promise<(AgentQueueItem & { sourceAgentName: string; targetAgentName: string })[]>;
   /** Atomically selects and marks "in_progress" the oldest pending queue item for this agent, so two overlapping ticks of the same agent can't both claim it. */
   claimNextPendingQueueItem(agentId: number): Promise<AgentQueueItem | undefined>;
-  createQueueItem(agentId: number, content: string, opts?: { sourceAgentId?: number; handoffDepth?: number }): Promise<AgentQueueItem>;
+  createQueueItem(agentId: number, content: string, opts?: QueueItemOpts): Promise<AgentQueueItem>;
+  getQueueItem(id: number): Promise<AgentQueueItem | undefined>;
+  getPipelines(): Promise<Pipeline[]>;
+  getPipeline(id: number): Promise<Pipeline | undefined>;
+  createPipeline(input: { name: string; description?: string; stages: string; scheduleMinutes: number | null; originTaskId?: number | null }): Promise<Pipeline>;
+  updatePipeline(id: number, patch: Partial<Pick<Pipeline, "name" | "description" | "stages" | "scheduleMinutes" | "active" | "lastRunAt">>): Promise<Pipeline | undefined>;
+  deletePipeline(id: number): Promise<void>;
+  createPipelineRun(pipelineId: number, originTaskId: number | null): Promise<PipelineRun>;
+  getPipelineRun(id: number): Promise<PipelineRun | undefined>;
+  getPipelineRuns(pipelineId: number, limit?: number): Promise<PipelineRun[]>;
+  updatePipelineRun(id: number, patch: Partial<Pick<PipelineRun, "status" | "stageIndex" | "output" | "finishedAt">>): Promise<PipelineRun | undefined>;
   updateQueueItem(id: number, patch: Partial<Pick<AgentQueueItem, "status" | "doneAt">>): Promise<AgentQueueItem | undefined>;
 
   getRecurringTasks(agentId: number): Promise<AgentRecurringTask[]>;

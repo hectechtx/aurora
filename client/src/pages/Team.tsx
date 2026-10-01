@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { IdentityAvatar } from "@/components/ui/Avatar";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { TeamWorld, type Handoff, type PipelineFlow } from "@/components/TeamWorld";
 import { Play, Pause, X, ShieldAlert, Wrench } from "lucide-react";
 
 interface Member {
@@ -30,7 +31,7 @@ interface Member {
   relationships: { otherAgentId: number; sentiment: number; interactions: number }[];
 }
 
-interface TeamData { members: Member[]; pendingApprovals: number }
+interface TeamData { members: Member[]; pendingApprovals: number; recentHandoffs: Handoff[]; pipelineFlows: PipelineFlow[] }
 
 type State = "working" | "approval" | "idle" | "paused";
 
@@ -117,6 +118,7 @@ export default function Team() {
   const qc = useQueryClient();
   const { data } = useQuery<TeamData>({ queryKey: ["/api/team"], refetchInterval: 2500 });
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [view, setView] = useState<"world" | "ring">("world");
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 900, h: 640 });
 
@@ -161,7 +163,22 @@ export default function Team() {
   return (
     <div className="flex h-screen flex-col">
       <div className="border-b border-border px-6 py-4">
-        <PageHeader title="Team" description="Watch AURORA and her agents work, live." />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <PageHeader title="Team" description="Watch AURORA and her agents work, live." />
+          <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
+            {(["world", "ring"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                aria-pressed={view === v}
+                className={cn("rounded px-2.5 py-1 capitalize", view === v ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                {v === "world" ? "Office" : "Ring"}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
           {(Object.keys(counts) as State[]).map((s) => (
             <span key={s} className="inline-flex items-center gap-1.5">
@@ -179,7 +196,11 @@ export default function Team() {
 
       <div className="flex min-h-0 flex-1">
         <div ref={stageRef} className="relative min-h-0 flex-1 overflow-auto">
-          {members.length === 0 ? (
+          {members.length > 0 && view === "world" ? (
+            <div className="p-4 sm:p-6">
+              <TeamWorld members={members} handoffs={data?.recentHandoffs ?? []} flows={data?.pipelineFlows ?? []} selectedId={selectedId} onSelect={setSelectedId} />
+            </div>
+          ) : members.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No agents yet — create one on the Agents page.</div>
           ) : ring ? (
             <>

@@ -177,9 +177,18 @@ function pickMusicTrack(): string | null {
   if (!dir) return null;
   const exts = new Set([".mp3", ".wav", ".ogg", ".m4a", ".flac"]);
   try {
-    const files = fs.readdirSync(dir).filter((f) => exts.has(path.extname(f).toLowerCase()));
-    if (files.length === 0) return null;
-    return path.join(dir, files[Math.floor(Math.random() * files.length)]);
+    // Only tracks that can actually be read: OneDrive "online-only"
+    // placeholders list fine but fail to open, which made ffmpeg (and with it
+    // a whole finished video render) fail with "Invalid argument".
+    const readable = (f: string) => {
+      try {
+        const fd = fs.openSync(path.join(dir, f), "r");
+        try { return fs.readSync(fd, Buffer.alloc(16), 0, 16, 0) === 16; } finally { fs.closeSync(fd); }
+      } catch { return false; }
+    };
+    const files = fs.readdirSync(dir).filter((f) => exts.has(path.extname(f).toLowerCase())).sort(() => Math.random() - 0.5);
+    const pick = files.slice(0, 12).find(readable);
+    return pick ? path.join(dir, pick) : null;
   } catch {
     return null;
   }
@@ -323,11 +332,16 @@ export async function generateStoryboard(opts: GenerateStoryboardOptions, hooks:
     const outPath = path.join(workDir, "final.mp4");
     if (musicPath) {
       onProgress?.("Mixing in background music…");
-      await runFfmpeg([
-        "-y", "-i", concatPath, "-stream_loop", "-1", "-i", musicPath,
-        "-filter_complex", "[1:a]volume=0.12[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=2[a]",
-        "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-shortest", outPath,
-      ], 300_000);
+      try {
+        await runFfmpeg([
+          "-y", "-i", concatPath, "-stream_loop", "-1", "-i", musicPath,
+          "-filter_complex", "[1:a]volume=0.12[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=2[a]",
+          "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-shortest", outPath,
+        ], 300_000);
+      } catch {
+        // Music is a nice-to-have — never lose a finished render over it.
+        fs.copyFileSync(concatPath, outPath);
+      }
     } else {
       fs.copyFileSync(concatPath, outPath);
     }

@@ -30,7 +30,7 @@ const PIPELINES: Def[] = [
   {
     name: "ClipStorm: Daily Clips", schedule: "daily",
     steps: [
-      { agent: "Zane Cooper", instruction: "Find clip sources: the studio's newest videos (list_library kind=video) — only our own content or creators who explicitly allow clipping. Pick up to 3 of the strongest 15-60 second moments with exact source (Library filename or URL), start and end times, and the hook." },
+      { agent: "Zane Cooper", instruction: "Find clip sources ONLY from what actually exists: call list_library kind=video and use only videos it lists (the studio's own finished episodes), or a creator URL the owner has explicitly approved for clipping. Never invent a video, title or timestamp. If list_library shows no videos, reply with exactly: NOTHING TO DO — no studio videos to clip yet. Otherwise pick up to 3 of the strongest 15-60 second moments: exact Library filename, start, end, and the hook (use video_transcript timestamps only for real YouTube URLs)." },
       { agent: "Mila Novak", instruction: "Cut each chosen moment with make_clip (vertical, captions on). Report each clip's Library id, length and the hook." },
       { agent: "Ezra Bloom", instruction: "For each clip write the on-screen hook, caption, hashtags and title for YouTube Shorts, TikTok, Instagram Reels, Facebook and X." },
       { agent: "Kira Sol", instruction: "Package each clip for posting: one save_deliverable per clip with mediaId = the clip's Library id, the per-platform captions/hashtags, and a suggested posting time." },
@@ -40,9 +40,9 @@ const PIPELINES: Def[] = [
     name: "Goods: Daily Product Drop", schedule: "daily",
     steps: [
       { agent: "Hana Mori", instruction: "Find 2 product ideas worth adding to the store today (print-on-demand apparel, mugs, posters, stickers or digital downloads that fit our kid-friendly studio brand). Target customer, price point, why now." },
-      { agent: "Owen Blake", instruction: "Design each product: the exact design description and a product-mockup image prompt (e.g. 'white t-shirt mockup with a bright cartoon fox astronaut on the chest')." },
+      { agent: "Owen Blake", instruction: "Design each product: the artwork (an illustration with NO text and NO people, e.g. 'a bright cartoon fox astronaut waving') and, if wanted, a short slogan to print under it (exact spelling, max 40 characters)." },
       { agent: "Tyler Grant", instruction: "Write the listing for each: title, description, bullet points, up to 13 tags, and a price." },
-      { agent: "Lucia Ramos", instruction: "Add each finished product to the catalog with add_store_product (name, description, price, category, tags, image_prompt = the mockup prompt). Then send the owner a short save_deliverable summary of today's new products." },
+      { agent: "Lucia Ramos", instruction: "Add each finished product to the catalog with add_store_product (name, description, price, category, tags, image_prompt = the artwork description, design_text = the slogan if any). Then send the owner a short save_deliverable summary of today's new products." },
     ],
   },
   {

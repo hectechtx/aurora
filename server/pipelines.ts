@@ -136,6 +136,16 @@ export async function onQueueItemFinished(queueItemId: number, status: "final" |
     return;
   }
 
+  // A stage can end the run honestly when there's genuinely nothing to work
+  // on (e.g. no studio videos exist yet to clip) — instead of later stages
+  // inventing inputs (measured: a clip scout made up two source videos).
+  if (/^\W*NOTHING TO DO/i.test(reply.trim())) {
+    await storage.updatePipelineRun(run.id, { status: "done", output: reply, finishedAt: Date.now() });
+    await storage.log(`pipeline skipped: ${pipeline.name}`, `step ${index + 1} (${agentName}): ${reply.slice(0, 160)}`);
+    await postToChat(run.originTaskId, item.agentId, `Pipeline **${pipeline.name}** had nothing to do this time — ${agentName}: ${reply.replace(/^\W*NOTHING TO DO\W*/i, "")}`);
+    return;
+  }
+
   const next = index + 1;
   if (next < stages.length) {
     const nextAgent = await storage.getAgent(stages[next].agentId);

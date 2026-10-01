@@ -22,7 +22,7 @@ import { browseInteract, BrowserToolError, READ_ONLY_ACTIONS, type BrowseAction 
 import { trendingVideos, youtubeSearch, videoTranscript, newsHeadlines, saveDocument, makeVoiceover, VOICE_IDS } from "./content-tools";
 import { getCompanies } from "./companies";
 import { timestampedTranscript, makeClip } from "./clips";
-import { addLedgerEntry, treasurySummary, addProduct, listProducts, newImageName } from "./commerce";
+import { addLedgerEntry, treasurySummary, addProduct, listProducts, newImageName, artworkPrompt, composeDesign } from "./commerce";
 import { generateStoryboard } from "./storyboard";
 import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
@@ -289,7 +289,8 @@ function builtinTools(): ToolDef[] {
         properties: {
           name: { type: "string" }, description: { type: "string" }, price: { type: "number", description: "USD" },
           category: { type: "string" }, tags: { type: "array", items: { type: "string" } },
-          image_prompt: { type: "string", description: "What the product image should show (e.g. a t-shirt mockup with the design)" },
+          image_prompt: { type: "string", description: "The design ARTWORK only — e.g. 'a cartoon fox astronaut waving'. No text or people; the image model can't spell." },
+          design_text: { type: "string", description: "Optional slogan printed under the artwork in a real font (exact spelling), max 40 chars" },
         },
         required: ["name", "description", "price"],
       },
@@ -1382,9 +1383,10 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
         let imagePath: string | null = null;
         if (args.image_prompt && config.imageGenHost) {
           try {
-            const { pngBuffer } = await generateImage(config.imageGenHost, String(args.image_prompt), config.ollamaHost);
+            const { pngBuffer } = await generateImage(config.imageGenHost, artworkPrompt(String(args.image_prompt)), config.ollamaHost);
+            const design = await composeDesign(pngBuffer, args.design_text ? String(args.design_text) : undefined);
             imagePath = newImageName();
-            fs.writeFileSync(path.join(getCreationsDir(), imagePath), pngBuffer);
+            fs.writeFileSync(path.join(getCreationsDir(), imagePath), design);
           } catch { /* product without an image is still useful */ }
         }
         const who = memoryAgentId ? (await storage.getAgent(memoryAgentId))?.name.trim() ?? "agent" : "AURORA";

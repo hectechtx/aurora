@@ -13,7 +13,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { sqlite } from "./storage-sqlite";
+import os from "node:os";
 import { getCreationsDir } from "./paths";
+import { runFfmpeg } from "./storyboard";
 
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS ledger_entries (
@@ -196,4 +198,45 @@ h2{font-size:1.05rem;margin:10px 0 6px}p{color:#aab;font-size:.9rem;line-height:
 
 export function newImageName(ext = "png"): string {
   return `product-${randomUUID()}.${ext}`;
+}
+
+/**
+ * The image model is told to draw artwork only — no text (it can't spell:
+ * measured "ROF TAIN ROMINS" on a shirt) and no people (no AI-generated
+ * models, especially children, on products).
+ */
+export function artworkPrompt(prompt: string): string {
+  return `${prompt}. Isolated illustration artwork for printing on merchandise, centered on a plain white background, ` +
+    "bold clean shapes, vibrant colors, cute family-friendly style. Absolutely no text, no letters, no words, no people, " +
+    "no human figures, no weapons, nothing violent or scary.";
+}
+
+/**
+ * Print-ready design file: the artwork with the slogan set in a real font
+ * underneath (exact spelling), on a 2000x2400 canvas — what a print-on-demand
+ * service wants uploaded. Without design text, the artwork alone is returned.
+ */
+export async function composeDesign(artwork: Buffer, designText: string | undefined): Promise<Buffer> {
+  const text = (designText ?? "").trim().slice(0, 40);
+  if (!text) return artwork;
+  const font = ["C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/arial.ttf"].find((f) => fs.existsSync(f));
+  if (!font) return artwork;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aurora-design-"));
+  try {
+    fs.writeFileSync(path.join(dir, "art.png"), artwork);
+    fs.copyFileSync(font, path.join(dir, "font.ttf"));
+    fs.writeFileSync(path.join(dir, "text.txt"), text.toUpperCase(), "utf8");
+    const size = text.length > 22 ? 120 : text.length > 14 ? 150 : 190;
+    // Relative filenames + cwd keep ffmpeg's filter syntax free of Windows path escaping.
+    await runFfmpeg([
+      "-y", "-f", "lavfi", "-i", "color=c=white:s=2000x2400", "-i", "art.png",
+      "-filter_complex",
+      `[1:v]scale=1700:1700:force_original_aspect_ratio=decrease[a];[0:v][a]overlay=(W-w)/2:120[b];` +
+      `[b]drawtext=fontfile=font.ttf:textfile=text.txt:fontsize=${size}:fontcolor=black:x=(w-text_w)/2:y=1960-text_h/2`,
+      "-frames:v", "1", "design.png",
+    ], 120_000, dir);
+    return fs.readFileSync(path.join(dir, "design.png"));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }

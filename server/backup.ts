@@ -60,11 +60,34 @@ export async function backupNow(sqlite: DatabaseType.Database): Promise<string |
     const dest = path.join(BACKUP_DIR, `aurora-${stamp}.db`);
     await sqlite.backup(dest);
     pruneOldBackups();
+    mirror(dest);
     return dest;
   } catch (err) {
     log(`backup: failed — ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
+}
+
+// A second copy of every backup on the other drive (the external data drive
+// under AURORA_HOME, while the live DB is on the internal one), so losing
+// either drive — a failing USB disk or a Windows reset — never loses both.
+const MIRROR_DIR = process.env.AURORA_BACKUP_MIRROR_DIR
+  ?? (process.env.AURORA_HOME ? path.join(process.env.AURORA_HOME, "db-backups") : null);
+const MIRROR_KEEP = 48;
+
+function mirror(src: string): void {
+  if (!MIRROR_DIR || path.resolve(MIRROR_DIR) === path.resolve(BACKUP_DIR)) return;
+  // Async and best-effort: the mirror drive is the flaky one.
+  void (async () => {
+    try {
+      await fs.promises.mkdir(MIRROR_DIR, { recursive: true });
+      await fs.promises.copyFile(src, path.join(MIRROR_DIR, path.basename(src)));
+      const files = (await fs.promises.readdir(MIRROR_DIR)).filter((f) => /^aurora-.*.db$/.test(f)).sort();
+      for (const stale of files.slice(0, Math.max(0, files.length - MIRROR_KEEP))) await fs.promises.unlink(path.join(MIRROR_DIR, stale)).catch(() => {});
+    } catch (err) {
+      log(`backup: mirror copy failed — ${err instanceof Error ? err.message : String(err)}`);
+    }
+  })();
 }
 
 /** Starts the periodic backup loop, taking one immediately so a session always has at least one fresh snapshot behind it. */

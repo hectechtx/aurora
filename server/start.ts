@@ -10,6 +10,7 @@ import { startComfyUi } from "./comfyui";
 import { startTelegramBot } from "./telegram";
 import { repairSkillPaths } from "./skills/runner";
 import { seedOrganization } from "./companies";
+import { ensureTalents } from "./talent";
 import { ensureCompanyPipelines } from "./org-pipelines";
 import { SKILLS_DIR } from "./paths";
 
@@ -58,6 +59,7 @@ export async function startServer(opts: StartServerOptions = {}): Promise<{ port
   // First run of the companies layer: assign agents, hire the new roles, found
   // the simulated companies. No-op once companies exist.
   await seedOrganization().catch((err) => log(`organization seed failed: ${err instanceof Error ? err.message : String(err)}`));
+  try { ensureTalents(); } catch (err) { log(`talent roster failed: ${err instanceof Error ? err.message : String(err)}`); }
   await ensureCompanyPipelines().catch((err) => log(`company pipelines failed: ${err instanceof Error ? err.message : String(err)}`));
   startScheduler();
   // Long-poll loop for the Telegram music remote. No-ops until a bot token

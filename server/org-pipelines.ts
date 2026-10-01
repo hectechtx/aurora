@@ -10,6 +10,40 @@ interface Def { name: string; schedule: "daily" | "weekly"; steps: { agent: stri
 
 const PIPELINES: Def[] = [
   {
+    name: "Talent: Spill the Tea with Tia (daily story time)", schedule: "daily",
+    steps: [
+      { agent: "Rhea Quill", instruction: "Find today's 3 biggest viral / entertainment stories that are REAL and reported by credible outlets (news_headlines, web_search, trending_videos, web_fetch to confirm). For each: what happened, who reported it (outlet + link), what's confirmed vs 'reportedly'. Skip private people, minors, and anything about health, sexuality or crimes beyond official reports. If nothing qualifies, reply exactly: NOTHING TO DO — no solid stories today." },
+      { agent: "Tia Tea", instruction: "Write today's 'Spill the Tea with Tia' story-time script (about 45-60 seconds spoken, ~130 words): a hooky opener, the stories in your dramatic funny voice using ONLY the researched facts, naming the outlet for each ('according to…'), 'reportedly' for anything unconfirmed, and a cozy sign-off. Spoken words only. Save it with save_document and output the script." },
+      { agent: "Victor Hale", instruction: "Fact and risk check this gossip script against the research above: anything not supported by a cited source, possibly defamatory, about private people or minors, or mocking someone's looks must be cut or softened. Output ONLY the final approved spoken script (or exactly NOTHING TO DO — too risky to publish if it can't be fixed)." },
+      { agent: "Tia Tea", instruction: "Make the approved script into your video with talent_video (talent = Tia, title = a catchy story-time title). Then send it to the Outbox with save_deliverable (mediaId = the video) with captions for TikTok / Shorts / Reels, hashtags, the source links, and the label 'AI-generated virtual creator'." },
+    ],
+  },
+  {
+    name: "Talent: Melly's Weekly Gaming Video", schedule: "weekly",
+    steps: [
+      { agent: "Melly King", instruction: "Pick this week's best gaming / pop-culture topic from real news and trends (news_headlines, trending_videos, web_search). Write a ~45 second script in your bright, chaotic voice (spoken words only, real facts only), make it with talent_video (talent = Melly), and send it to the Outbox with save_deliverable (mediaId) with title, caption, hashtags and the 'AI-generated virtual creator' label." },
+    ],
+  },
+  {
+    name: "Talent: Sienna's Weekly Lifestyle Video", schedule: "weekly",
+    steps: [
+      { agent: "Sienna Bloom", instruction: "Pick one trending lifestyle / wellness topic (trending_videos, web_search). Write a cozy ~45 second script in your voice (spoken words only, no medical claims), make it with talent_video (talent = Sienna), and send it to the Outbox with save_deliverable (mediaId) with title, caption, hashtags and the 'AI-generated virtual creator' label." },
+    ],
+  },
+  {
+    name: "Talent: Juno's Weekly Music Video", schedule: "weekly",
+    steps: [
+      { agent: "Juno Wave", instruction: "Make this week's music video: hype AURORA Records' newest release (list_library kind=audio) or break down a trending dance challenge — describe songs, never use copyrighted audio. Write ~45 seconds in your voice (spoken words only), make it with talent_video (talent = Juno), and send it to the Outbox with save_deliverable (mediaId) with title, caption, hashtags and the 'AI-generated virtual creator' label." },
+    ],
+  },
+  {
+    name: "Talent: Weekly Social Plan", schedule: "weekly",
+    steps: [
+      { agent: "Vivian Cross", instruction: "Review the agency (list_talents, list_outbox): what each talent posted this week, what to double down on, and next week's theme for each talent. Keep every brand consistent." },
+      { agent: "Bea Holloway", instruction: "Turn the plan into next week's social kit for every talent: profile bio and handle suggestions (if not set up yet), a day-by-day posting calendar with times, and per-platform captions and hashtags, each post labelled 'AI-generated virtual creator'. Send it to the Outbox with save_deliverable." },
+    ],
+  },
+  {
     name: "Studio: Daily Episode", schedule: "daily",
     steps: [
       { agent: "riley", instruction: "Find today's best video opportunity for our kid-friendly channel (trending_videos, youtube_search). Pick ONE idea and give the title, hook, angle for ages 4-8, and 5-7 story beats." },

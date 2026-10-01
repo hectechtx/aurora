@@ -120,7 +120,7 @@ async function planScenes(host: string, model: string, topic: string, targetMinu
 }
 
 /** Duration of a PCM WAV buffer, read straight from its RIFF header — no ffprobe needed. */
-function wavDurationSeconds(buf: Buffer): number {
+export function wavDurationSeconds(buf: Buffer): number {
   let offset = 12; // past "RIFF" + size(4) + "WAVE"
   let sampleRate = 22050, channels = 1, bitsPerSample = 16, dataSize = 0;
   while (offset + 8 <= buf.length) {
@@ -146,7 +146,7 @@ function srtTime(s: number): string {
 }
 
 /** Narration split into ~6-word captions, spread evenly across each scene's span. */
-function captionsSrt(scenes: { start: number; duration: number; narration: string }[]): string {
+export function captionsSrt(scenes: { start: number; duration: number; narration: string }[]): string {
   const cues: string[] = [];
   let n = 1;
   for (const sc of scenes) {

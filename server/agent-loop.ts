@@ -28,6 +28,7 @@ import { addLedgerEntry, treasurySummary, addProduct, listProducts, newImageName
 import { generateStoryboard, runFfmpeg } from "./storyboard";
 import { generateMusic, isMusicGenInstalled } from "./musicgen";
 import { isWanInstalled, generateWanVideo } from "./wanvideo";
+import { ensureTalents, findTalent, describeTalents, createTalentSheet, talentVideo } from "./talent";
 import os from "node:os";
 import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
@@ -316,6 +317,27 @@ function builtinTools(): ToolDef[] {
           seconds: { type: "number", description: "Length, 30-240 (default 120)" },
         },
         required: ["title", "style"],
+      },
+    },
+    {
+      name: "list_talents", kind: "builtin", risk: "low",
+      description: "List AURORA Talent's virtual creators (VTubers / virtual influencers): name, niche, tagline, voice and whether their character sheet is made.",
+      parameters: { type: "object", properties: {} },
+    },
+    {
+      name: "create_talent_sheet", kind: "builtin", risk: "low",
+      description: "Build a virtual talent's character sheet in the house semi-realistic 3D style: portrait, full body and four expressions, saved to the Library (skips parts that already exist). Takes a few minutes.",
+      parameters: { type: "object", properties: { talent: { type: "string", description: "Talent name, e.g. 'Tia'" } }, required: ["talent"] },
+    },
+    {
+      name: "talent_video", kind: "builtin", risk: "low",
+      description:
+        "Turn a finished script into a vertical (9:16) video of a virtual talent saying it in their own voice — lip-synced talking character, burned-in captions — saved to the Library. " +
+        "Up to ~75 seconds of speech. Spoken words only in the script. Takes several minutes. Returns the Library id for save_deliverable mediaId.",
+      parameters: {
+        type: "object",
+        properties: { talent: { type: "string", description: "Talent name, e.g. 'Tia'" }, script: { type: "string" }, title: { type: "string" } },
+        required: ["talent", "script", "title"],
       },
     },
     {
@@ -1598,6 +1620,37 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
           kind: "audio", prompt: `${title} — ${String(args.style ?? "")}`.slice(0, 500), filePath: filename, title,
         });
         return { ok: true, output: `Produced "${title}" — saved to the Library as #${creation.id} (use mediaId ${creation.id} with save_deliverable).` };
+      }
+      case "list_talents": {
+        ensureTalents();
+        return { ok: true, output: describeTalents() || "No talents yet." };
+      }
+      case "create_talent_sheet": {
+        ensureTalents();
+        const t = findTalent(String(args.talent ?? ""));
+        if (!t) return { ok: false, output: `no talent called "${args.talent}" — use list_talents` };
+        if (!config.imageGenHost) return { ok: false, output: "image generation isn't set up" };
+        const out = await createTalentSheet(t, { imageHost: config.imageGenHost, ollamaHost: config.ollamaHost, visionModel: config.visionModel || config.model });
+        return { ok: true, output: out };
+      }
+      case "talent_video": {
+        ensureTalents();
+        const t = findTalent(String(args.talent ?? ""));
+        if (!t) return { ok: false, output: `no talent called "${args.talent}" — use list_talents` };
+        if (!config.imageGenHost) return { ok: false, output: "image/video generation isn't set up" };
+        if (!t.portrait) {
+          await createTalentSheet(t, { imageHost: config.imageGenHost, ollamaHost: config.ollamaHost, visionModel: config.visionModel || config.model });
+        }
+        const title = String(args.title ?? `${t.name} video`).slice(0, 120);
+        const fresh = findTalent(t.slug)!;
+        const r = await talentVideo(fresh, String(args.script ?? ""), { imageHost: config.imageGenHost, ollamaHost: config.ollamaHost });
+        const filename = `talent-${fresh.slug}-${randomUUID()}.mp4`;
+        fs.writeFileSync(path.join(getCreationsDir(), filename), r.buffer);
+        const creation = await storage.createCreation({
+          taskId: ctx.type === "task" ? ctx.taskId : undefined, agentId: memoryAgentId ?? undefined,
+          kind: "video", prompt: `${fresh.name}: ${String(args.script ?? "").slice(0, 400)}`, filePath: filename, title,
+        });
+        return { ok: true, output: `Made "${title}" — ${Math.round(r.seconds)}s of ${fresh.name}${r.lipSynced ? " talking (lip-synced)" : " (animated portrait + voice)"}, saved to the Library as #${creation.id}. Use mediaId ${creation.id} with save_deliverable, and label the post as AI-generated.` };
       }
       case "check_inbox":
         return { ok: true, output: await leadInbox() };

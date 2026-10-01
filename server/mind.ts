@@ -113,8 +113,8 @@ export async function think(host: string, fallbackModel: string, a: Agent): Prom
     (mem ? `Recent moments: ${mem}\n` : "") +
     "Write ONE private inner thought you're having right now — first person, 1-2 sentences, fully in character and true to your personality and mood. " +
     "It can be about your work, a teammate, a feeling, a worry, a hope, or something you want. No quotes, no narration, no hashtags.";
-  const res = await chat(host, SMALL_MODEL, [{ role: "user", content: prompt }], [], 2048, { think: false })
-    .catch(() => chat(host, fallbackModel, [{ role: "user", content: prompt }], [], 2048, { think: false }));
+  const res = await chat(host, SMALL_MODEL, [{ role: "user", content: prompt }], [], 2048, { think: false, cloudOk: true })
+    .catch(() => chat(host, fallbackModel, [{ role: "user", content: prompt }], [], 2048, { think: false, cloudOk: true }));
   const text = (res.message.content ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0] ?? "";
   if (text.length < 8) return null;
   addThought(a.id, "thought", text);
@@ -139,8 +139,8 @@ export async function converse(host: string, fallbackModel: string, a: Agent, b:
     `A: ${brief(a)}\nB: ${brief(b)}\nRight now they're ${relWord(ab)}.\n` + aboutLine +
     "Write their short natural exchange — 2 to 4 lines, alternating, each fully in character (personality, mood, how they feel about each other). " +
     'Format each line exactly as "A: ..." or "B: ...". Then a last line exactly "TONE: warm", "TONE: neutral" or "TONE: tense" for how it went.';
-  const res = await chat(host, SMALL_MODEL, [{ role: "user", content: prompt }], [], 2048, { think: false })
-    .catch(() => chat(host, fallbackModel, [{ role: "user", content: prompt }], [], 2048, { think: false }));
+  const res = await chat(host, SMALL_MODEL, [{ role: "user", content: prompt }], [], 2048, { think: false, cloudOk: true })
+    .catch(() => chat(host, fallbackModel, [{ role: "user", content: prompt }], [], 2048, { think: false, cloudOk: true }));
   const raw = res.message.content ?? "";
   const lines = raw.split(/\r?\n/)
     .map((l) => l.trim().match(/^\**\s*(A|B)\s*\**\s*:\s*(.+)$/i))

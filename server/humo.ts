@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { COMFYUI_DIR } from "./paths";
+import { withHeavyGpu } from "./gpu";
 
 const MODEL = "humo_1.7B_fp16.safetensors";
 const AUDIO_ENCODER = "whisper_large_v3_fp16.safetensors";
@@ -62,7 +63,7 @@ export interface HumoOptions {
 }
 
 /** Renders one lip-synced clip and returns the MP4 bytes (with the audio). */
-export async function generateHumoClip(host: string, opts: HumoOptions): Promise<Buffer> {
+async function generateHumoClipInner(host: string, opts: HumoOptions): Promise<Buffer> {
   if (!isHumoInstalled()) throw new HumoError("HuMo isn't installed in ComfyUI yet.");
   if (opts.ollamaHost) {
     try { const { unloadAllModels } = await import("./ollama"); await unloadAllModels(opts.ollamaHost); } catch { /* best-effort */ }
@@ -130,4 +131,9 @@ export async function generateHumoClip(host: string, opts: HumoOptions): Promise
   } finally {
     try { fs.unlinkSync(path.join(INPUT_DIR, audioName)); } catch { /* already gone */ }
   }
+}
+
+/** talking clip with the GPU to itself (see gpu.ts) — local LLM calls wait or go to the cloud meanwhile. */
+export function generateHumoClip(...args: Parameters<typeof generateHumoClipInner>): ReturnType<typeof generateHumoClipInner> {
+  return withHeavyGpu("talking clip", () => generateHumoClipInner(...args)) as ReturnType<typeof generateHumoClipInner>;
 }

@@ -1,3 +1,4 @@
+import { withHeavyGpu } from "./gpu";
 // Thin client for a local ComfyUI server. Same spirit as ollama.ts: no API
 // keys, nothing hosted — if it isn't running, image generation reports
 // unavailable rather than falling back to a paid API.
@@ -132,7 +133,7 @@ export interface ImageOptions {
  * one of the reasons image calls looked "randomly" broken. Best-effort — a
  * failed unload shouldn't block the attempt.
  */
-export async function generateImage(host: string, prompt: string, ollamaHost?: string, opts: ImageOptions = {}): Promise<GeneratedImage> {
+async function generateImageInner(host: string, prompt: string, ollamaHost?: string, opts: ImageOptions = {}): Promise<GeneratedImage> {
   if (ollamaHost) {
     try {
       const { unloadAllModels } = await import("./ollama");
@@ -195,4 +196,9 @@ export async function generateImage(host: string, prompt: string, ollamaHost?: s
   }
 
   throw new Error("Image generation timed out.");
+}
+
+/** image with the GPU to itself (see gpu.ts) — local LLM calls wait or go to the cloud meanwhile. */
+export function generateImage(...args: Parameters<typeof generateImageInner>): ReturnType<typeof generateImageInner> {
+  return withHeavyGpu("image", () => generateImageInner(...args)) as ReturnType<typeof generateImageInner>;
 }

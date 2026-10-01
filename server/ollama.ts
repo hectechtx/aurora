@@ -26,6 +26,8 @@ export interface OllamaChatResult {
   done: boolean;
 }
 
+import { gpuHeavyBusy, waitForGpu } from "./gpu";
+
 async function fetchJson(url: string, init?: RequestInit, timeoutMs = 15_000): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -161,7 +163,21 @@ export function stripStrayToolJson(text: string): string {
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export async function chat(host: string, model: string, messages: OllamaMessage[], tools: OllamaToolDef[], numCtx: number = NUM_CTX, opts: { think?: boolean; format?: "json" } = {}): Promise<OllamaChatResult> {
+export async function chat(host: string, model: string, messages: OllamaMessage[], tools: OllamaToolDef[], numCtx: number = NUM_CTX, opts: { think?: boolean; format?: "json"; cloudOk?: boolean } = {}): Promise<OllamaChatResult> {
+  // While a heavy media job has the GPU (gpu.ts), don't fight it for VRAM:
+  // background work goes to a free cloud provider if one has quota, and
+  // everything else (and anything the cloud can't take) waits its turn.
+  // Cloud models (":cloud") don't use the local GPU at all.
+  if (gpuHeavyBusy() && !/:cloud$/.test(model)) {
+    if (opts.cloudOk) {
+      try {
+        const { cloudChat } = await import("./cloud-llm");
+        const r = await cloudChat(messages, tools, { format: opts.format });
+        if (r) return { message: salvageTextToolCalls(r.message, new Set(tools.map((t) => t.function.name))), done: true };
+      } catch { /* fall back to waiting for the local GPU */ }
+    }
+    await waitForGpu();
+  }
   const body = JSON.stringify({ model, messages, tools: tools.length ? tools : undefined, stream: false, options: { num_ctx: numCtx }, ...(opts.think !== undefined ? { think: opts.think } : {}), ...(opts.format ? { format: opts.format } : {}) });
   // On a single 8GB GPU, a burst of agent ticks can momentarily overwhelm
   // Ollama — a cold model load or VRAM pressure drops the connection, which

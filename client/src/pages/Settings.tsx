@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CloudAssistCard } from "@/components/CloudAssistCard";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
@@ -247,6 +248,8 @@ export default function Settings() {
       </Card>
 
       <VisionModelCard config={config} status={status} updateConfig={updateConfig} />
+
+      <CloudAssistCard />
 
       <Card id="autonomy" className="p-5 space-y-3 scroll-mt-16">
         <h2 className="text-sm font-medium">Autonomy</h2>

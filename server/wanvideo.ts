@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { COMFYUI_DIR } from "./paths";
+import { withHeavyGpu } from "./gpu";
 
 const MODEL = "wan2.2_ti2v_5B_fp16.safetensors";
 const TEXT_ENCODER = "umt5_xxl_fp8_e4m3fn_scaled.safetensors";
@@ -54,7 +55,7 @@ export interface WanOptions {
 }
 
 /** Renders one short clip and returns the MP4 bytes. */
-export async function generateWanVideo(host: string, opts: WanOptions): Promise<Buffer> {
+async function generateWanVideoInner(host: string, opts: WanOptions): Promise<Buffer> {
   if (!isWanInstalled()) throw new WanError("Wan 2.2 isn't installed in ComfyUI yet.");
   if (opts.ollamaHost) {
     try { const { unloadAllModels } = await import("./ollama"); await unloadAllModels(opts.ollamaHost); } catch { /* best-effort */ }
@@ -113,4 +114,9 @@ export async function generateWanVideo(host: string, opts: WanOptions): Promise<
     return Buffer.from(await res.arrayBuffer());
   }
   throw new WanError("Wan video timed out.");
+}
+
+/** Wan video with the GPU to itself (see gpu.ts) — local LLM calls wait or go to the cloud meanwhile. */
+export function generateWanVideo(...args: Parameters<typeof generateWanVideoInner>): ReturnType<typeof generateWanVideoInner> {
+  return withHeavyGpu("Wan video", () => generateWanVideoInner(...args)) as ReturnType<typeof generateWanVideoInner>;
 }

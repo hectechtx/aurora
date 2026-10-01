@@ -101,7 +101,7 @@ async function planScenes(host: string, model: string, topic: string, targetMinu
   ];
   // Thinking off + Ollama's JSON mode: a thinking model otherwise tends to put
   // the script inside its reasoning and return no parseable JSON at all.
-  const result = await chat(host, model, messages, [], 8192, { think: false, format: "json" });
+  const result = await chat(host, model, messages, [], 8192, { think: false, format: "json", cloudOk: true });
   const jsonText = extractJson(result.message.content ?? "");
   let parsed: unknown;
   try {

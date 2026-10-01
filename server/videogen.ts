@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { spawn, execFile } from "node:child_process";
 import { VIDEOGEN_DIR } from "./paths";
 import { unloadAllModels } from "./ollama";
+import { withHeavyGpu } from "./gpu";
 
 const REPO_DIR = path.join(VIDEOGEN_DIR, "repo");
 
@@ -322,7 +323,7 @@ export interface GenerateVideoHooks {
  * if the process goes quiet for a while (likely actually stuck), with a
  * generous absolute ceiling as a last-resort backstop.
  */
-export function generateVideo(opts: GenerateVideoOptions, hooks: GenerateVideoHooks = {}): Promise<Buffer> {
+function generateVideoInner(opts: GenerateVideoOptions, hooks: GenerateVideoHooks = {}): Promise<Buffer> {
   const { onProgress, onStart } = hooks;
   return new Promise(async (resolve, reject) => {
     if (!isVideoGenInstalled()) return reject(new VideoGenError("Video generation isn't set up yet — go to Settings and run setup first."));
@@ -453,4 +454,9 @@ export function generateVideo(opts: GenerateVideoOptions, hooks: GenerateVideoHo
       resolve(buf);
     });
   });
+}
+
+/** LTX video with the GPU to itself (see gpu.ts) — local LLM calls wait or go to the cloud meanwhile. */
+export function generateVideo(...args: Parameters<typeof generateVideoInner>): ReturnType<typeof generateVideoInner> {
+  return withHeavyGpu("LTX video", () => generateVideoInner(...args)) as ReturnType<typeof generateVideoInner>;
 }

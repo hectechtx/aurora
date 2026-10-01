@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { spawn, execFile } from "node:child_process";
 import { MUSICGEN_DIR } from "./paths";
 import { unloadAllModels } from "./ollama";
+import { withHeavyGpu } from "./gpu";
 
 const REPO_DIR = path.join(MUSICGEN_DIR, "repo");
 const VENV_DIR = path.join(MUSICGEN_DIR, "venv");
@@ -227,7 +228,7 @@ export interface GenerateMusicHooks {
  * download on first use), so — like video-gen — this gives up only if the
  * process goes quiet for a long stretch, with a generous absolute ceiling.
  */
-export function generateMusic(opts: GenerateMusicOptions, hooks: GenerateMusicHooks = {}): Promise<Buffer> {
+function generateMusicInner(opts: GenerateMusicOptions, hooks: GenerateMusicHooks = {}): Promise<Buffer> {
   const { onProgress, onStart } = hooks;
   return new Promise(async (resolve, reject) => {
     if (!isMusicGenInstalled()) return reject(new MusicGenError("Music generation isn't set up yet — go to Settings and run setup first."));
@@ -283,4 +284,9 @@ export function generateMusic(opts: GenerateMusicOptions, hooks: GenerateMusicHo
       }
     });
   });
+}
+
+/** music with the GPU to itself (see gpu.ts) — local LLM calls wait or go to the cloud meanwhile. */
+export function generateMusic(...args: Parameters<typeof generateMusicInner>): ReturnType<typeof generateMusicInner> {
+  return withHeavyGpu("music", () => generateMusicInner(...args)) as ReturnType<typeof generateMusicInner>;
 }

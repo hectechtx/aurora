@@ -2097,6 +2097,10 @@ async function buildBaseMessages(
 
 async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: AgentConfig, transcript: ToolCallRecord[], depth: number, messageId: number, thinkingSoFar = ""): Promise<TurnResult> {
   const storage = getStorage();
+  // Free cloud APIs may only take agents' background work — never the owner's
+  // own chats, and never AURORA herself (her prompt carries what she knows
+  // about the owner). See cloud-llm.ts.
+  const cloudOk = ctx.type === "agent" && !(await storage.getAgent(ctx.agentId))?.isOverseer;
 
   if (stopWasRequested(ctx)) {
     const reply = "Stopped.";
@@ -2114,7 +2118,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
       const wrap = await chat(config.ollamaHost, config.model, [
         ...messages,
         { role: "user", content: "You've used your tool budget for this turn. Using everything you've gathered above, write your final answer or report now — clearly and completely. No more tool calls." },
-      ], [], config.numCtx, { think: false });
+      ], [], config.numCtx, { think: false, cloudOk });
       reply = stripStrayToolJson(wrap.message.content ?? "");
     } catch { /* fall through to the plain notice */ }
     if (!reply) reply = "I ran out of steps for this turn before finishing — " + (summarizeTranscript(transcript) || "try breaking the request into smaller steps.");
@@ -2126,7 +2130,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
   let response;
   try {
     try {
-      response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx);
+      response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx, { cloudOk });
     } catch (err) {
       // An agent on a "big brain" model (e.g. MiniMax via Ollama cloud) falls
       // back to the owner's local model when the cloud isn't reachable or the
@@ -2135,7 +2139,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
       if (!local || local === config.model) throw err;
       await storage.log("big-brain model unavailable, using local model", `${config.model}: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, "error");
       config = { ...config, model: local };
-      response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx);
+      response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx, { cloudOk });
     }
   } catch (err) {
     const reply = `Couldn't reach Ollama at ${config.ollamaHost}: ${err instanceof Error ? err.message : String(err)}. Is "ollama serve" running?`;
@@ -2170,7 +2174,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
     // reasoning, which in that case IS the answer.
     if (!stripStrayToolJson(raw.replace(/\[DONE\]/gi, "")).trim() && transcript.length > 0) {
       try {
-        const retry = await chat(config.ollamaHost, config.model, messages, [], config.numCtx, { think: false });
+        const retry = await chat(config.ollamaHost, config.model, messages, [], config.numCtx, { think: false, cloudOk });
         raw = retry.message.content ?? "";
       } catch { /* fall through to the reasoning text */ }
       if (!raw.trim() && assistantMsg.thinking?.trim()) raw = assistantMsg.thinking.trim();

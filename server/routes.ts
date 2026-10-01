@@ -1,4 +1,6 @@
 import express from "express";
+import { getCloudMode, setCloudMode, listProviders, updateProvider, testProvider, providerModels } from "./cloud-llm";
+import { gpuStatus } from "./gpu";
 import { recentThoughts, teamThoughts, listKnowledge, forgetKnowledge, reflect, reflectionStatus } from "./mind";
 import type { Express, Request, Response } from "express";
 import type { Server } from "node:http";
@@ -538,6 +540,33 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
   // job description, through the same local image-gen pipeline as any other
   // creation. Not tracked as a Library creation (it's an agent property, not
   // generated content to browse) — just a filename on the agent row.
+  // Cloud assist (cloud-llm.ts): free LLM APIs that take agents' background
+  // thinking while the GPU renders media. Keys go in, never come back out.
+  app.get("/api/cloud", async (_req, res) => {
+    res.json({ mode: getCloudMode(), providers: listProviders(), gpu: gpuStatus() });
+  });
+  app.put("/api/cloud/mode", async (req, res) => {
+    setCloudMode(req.body?.mode === "off" ? "off" : "busy");
+    res.json({ mode: getCloudMode() });
+  });
+  app.put("/api/cloud/providers/:id", async (req, res) => {
+    const b = req.body ?? {};
+    updateProvider(String(req.params.id), {
+      apiKey: typeof b.apiKey === "string" ? b.apiKey : undefined,
+      model: typeof b.model === "string" ? b.model : undefined,
+      enabled: typeof b.enabled === "boolean" ? b.enabled : undefined,
+    });
+    res.json({ providers: listProviders() });
+  });
+  app.post("/api/cloud/providers/:id/test", async (req, res) => {
+    try { res.json({ result: await testProvider(String(req.params.id)) }); }
+    catch (err) { res.json({ result: `failed: ${err instanceof Error ? err.message : String(err)}` }); }
+  });
+  app.get("/api/cloud/providers/:id/models", async (req, res) => {
+    try { res.json({ models: await providerModels(String(req.params.id)) }); }
+    catch (err) { res.status(400).json({ message: err instanceof Error ? err.message : String(err) }); }
+  });
+
   // AURORA's mind: what she has learned, the team's recent inner life, and a
   // manual "reflect now". The owner can delete anything she shouldn't keep.
   app.get("/api/mind", async (_req, res) => {

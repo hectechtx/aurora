@@ -153,8 +153,8 @@ export function stripStrayToolJson(text: string): string {
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export async function chat(host: string, model: string, messages: OllamaMessage[], tools: OllamaToolDef[], numCtx: number = NUM_CTX): Promise<OllamaChatResult> {
-  const body = JSON.stringify({ model, messages, tools: tools.length ? tools : undefined, stream: false, options: { num_ctx: numCtx } });
+export async function chat(host: string, model: string, messages: OllamaMessage[], tools: OllamaToolDef[], numCtx: number = NUM_CTX, opts: { think?: boolean } = {}): Promise<OllamaChatResult> {
+  const body = JSON.stringify({ model, messages, tools: tools.length ? tools : undefined, stream: false, options: { num_ctx: numCtx }, ...(opts.think !== undefined ? { think: opts.think } : {}) });
   // On a single 8GB GPU, a burst of agent ticks can momentarily overwhelm
   // Ollama — a cold model load or VRAM pressure drops the connection, which
   // surfaces in Node as a low-level "fetch failed" (not an HTTP error). Those

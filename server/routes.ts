@@ -6,7 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { getStorage } from "./storage";
-import { runAgentTurn, runAgentTick, beginResumeAfterApproval, finishResumeAfterApproval, requestStop, OWNER_QUESTION_TAG } from "./agent-loop";
+import { runAgentTurn, runAgentTick, beginResumeAfterApproval, finishResumeAfterApproval, requestStop, agentsWorkingNow, OWNER_QUESTION_TAG } from "./agent-loop";
 import { installSkillFromGitHub, InstallError } from "./skills/installer";
 import { getStarterCatalog, installStarterSkill } from "./skills/starter";
 import { activateSkill, rejectSkillInstall, disableSkill, enableSkill, deleteSkillCompletely } from "./skills/lifecycle";
@@ -671,6 +671,46 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
     const [rels, all] = await Promise.all([storage().getRelationships(id), storage().getAgents()]);
     const nameById = new Map(all.map((a) => [a.id, a.name] as const));
     res.json(rels.map((r) => ({ ...r, otherAgentName: nameById.get(r.otherAgentId) ?? "unknown" })));
+  });
+
+  // Everything the live Team view needs in one poll: each agent's state, who's
+  // mid-turn right now, their latest activity, queue depth, and relationships.
+  app.get("/api/team", async (_req, res) => {
+    const all = await storage().getAgents();
+    const working = new Set(agentsWorkingNow());
+    const approvals = await storage().getApprovals();
+    const members = await Promise.all(all.map(async (a) => {
+      const [log, queue, rels] = await Promise.all([
+        storage().getAgentLog(a.id, 6),
+        storage().getAgentQueue(a.id),
+        storage().getRelationships(a.id),
+      ]);
+      const lastReply = [...log].reverse().find((e) => e.role === "assistant" && e.content.trim());
+      const lastTools: string[] = [];
+      for (const e of [...log].reverse()) {
+        if (!e.toolCalls) continue;
+        try { for (const t of JSON.parse(e.toolCalls) as { name: string }[]) lastTools.push(t.name); } catch { /* malformed transcript */ }
+        if (lastTools.length) break;
+      }
+      // A queue item can be left "in_progress" by a crash or restart, so only
+      // trust it while the agent is genuinely mid-turn (or parked on an approval).
+      const current = working.has(a.id)
+        ? queue.find((q) => q.status === "in_progress")
+        : queue.find((q) => q.status === "awaiting_approval");
+      return {
+        id: a.id, name: a.name.trim(), role: a.role, isOverseer: a.isOverseer, status: a.status,
+        avatarPath: a.avatarPath, mood: a.mood, energy: a.energy, morale: a.morale,
+        lastRunAt: a.lastRunAt, scheduleMinutes: a.scheduleMinutes, spawnedByAgentId: a.spawnedByAgentId,
+        working: working.has(a.id),
+        waitingApproval: queue.some((q) => q.status === "awaiting_approval"),
+        currentTask: current?.content.slice(0, 200) ?? null,
+        pendingCount: queue.filter((q) => q.status === "pending").length,
+        lastActivity: lastReply ? { text: lastReply.content.slice(0, 280), at: lastReply.createdAt } : null,
+        lastTools: [...new Set(lastTools)].slice(0, 4),
+        relationships: rels.map((r) => ({ otherAgentId: r.otherAgentId, sentiment: r.sentiment, interactions: r.interactions })),
+      };
+    }));
+    res.json({ members, pendingApprovals: approvals.filter((p) => p.status === "pending").length });
   });
 
   app.post("/api/agents/:id/run", async (req, res) => {

@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import {
   ListTodo, Image, BrainCircuit, SquareTerminal, Puzzle, ShieldCheck, ScrollText,
   Settings as SettingsIcon, Bot, Inbox, LayoutDashboard, Globe, Sparkles, FolderKanban,
-  Palette, LogOut, ChevronUp, HelpCircle, Music as MusicIcon, Eye,
+  Palette, LogOut, ChevronUp, HelpCircle, Music as MusicIcon, Eye, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -22,6 +22,7 @@ const NAV_GROUPS = [
   {
     label: "Agents",
     items: [
+      { href: "/team", label: "Team", icon: Users },
       { href: "/agents", label: "Agents", icon: Bot },
       { href: "/outbox", label: "Outbox", icon: Inbox },
     ],

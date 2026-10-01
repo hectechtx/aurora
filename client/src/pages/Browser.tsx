@@ -49,8 +49,9 @@ interface AgentTab { key: string; label: string; url: string; title: string; vis
 function webInstruction(ask: string, url: string, title: string): string {
   return (
     `[Browser] Starting page: "${title}" — ${url}\n\n${ask}\n\n` +
-    `Work in your browser tab — it's signed in wherever I am. Use browse_page to open/read pages and follow links, ` +
-    `and browse_interact when you need to click, type, or submit. Keep going step by step until it's done, ` +
+    `Start by laying out your steps with set_plan. Work in your browser tab — it's signed in wherever I am. ` +
+    `Use browse_page to open/read pages and follow links, and browse_interact when you need to click, type, or submit. ` +
+    `Keep going step by step, updating the plan as you finish each step, until it's done, ` +
     `then report what you did and what you found. Use any of your other tools too if the job needs them.`
   );
 }

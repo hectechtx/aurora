@@ -86,6 +86,11 @@ export type RunContext =
 // no need for a DB-level lock.
 const agentTicksInFlight = new Set<number>();
 
+/** Agent ids mid-turn right now — drives the live "working" state on the Team view. */
+export function agentsWorkingNow(): number[] {
+  return [...agentTicksInFlight];
+}
+
 // Lets a Task or Agent turn be interrupted from outside the loop — a Stop
 // button needs SOME way to reach into an in-progress turn, since the turn
 // itself is just a chain of `await`s with no built-in cancellation. Keyed
@@ -137,6 +142,19 @@ export interface TurnResult {
   approvalId?: number;
   /** True if this turn actually called at least one tool — i.e. it was working, not just talking. Gates auto-continue. */
   usedTools?: boolean;
+  /** Set when this turn called set_plan: whether that plan still has unfinished steps. Undefined = no plan update this turn. */
+  planOpen?: boolean;
+  /** The model signalled it's finished ([DONE]) — stripped from the stored reply, kept here for the auto-continue check. */
+  doneSignal?: boolean;
+}
+
+/** Whether the latest successful set_plan call in this transcript left steps unfinished, or undefined if there wasn't one. */
+function planStateOf(transcript: ToolCallRecord[]): boolean | undefined {
+  const last = [...transcript].reverse().find((t) => t.name === "set_plan" && t.status === "ok");
+  if (!last) return undefined;
+  const steps = Array.isArray(last.args.steps) ? last.args.steps.length : 0;
+  const done = Array.isArray(last.args.done) ? new Set(last.args.done.map(Number)).size : 0;
+  return done < steps;
 }
 
 interface ToolDef {
@@ -159,7 +177,8 @@ function builtinTools(): ToolDef[] {
     {
       name: "speak", kind: "builtin", risk: "low",
       description:
-        "Say something out loud through the speakers, in your own voice. Use this when you want the owner to HEAR something rather than " +
+        "Say something out loud through the speakers, in your own voice. ALWAYS call this when the owner asks you to say, speak, read, or " +
+        "repeat something out loud/aloud. Also use it when you want the owner to HEAR something rather than " +
         "only read it — finishing something they were waiting on, noticing something that needs their attention, or just answering them " +
         "conversationally. Works even when they aren't looking at the app. Keep it to a sentence or two of natural spoken language: no " +
         "markdown, no code, no lists. This is in addition to your written reply, not a replacement for it.",
@@ -167,7 +186,7 @@ function builtinTools(): ToolDef[] {
     },
     {
       name: "recall", kind: "builtin", risk: "low",
-      description: "Search previously saved notes by a label/value substring. Omit query to list the most recent notes.",
+      description: "Search your saved notes/memories by keywords (e.g. \"favorite drink\"). Returns the best matches. Omit query to list the most recent notes.",
       parameters: { type: "object", properties: { query: { type: "string" } } },
     },
     {
@@ -258,12 +277,15 @@ function builtinTools(): ToolDef[] {
       },
     },
     {
-      name: "generate_image", kind: "builtin", risk: "medium",
+      // Low risk: renders locally on the owner's own GPU and only writes into
+      // the Library — nothing leaves the machine. An approval per image made
+      // "make me a picture" feel broken.
+      name: "generate_image", kind: "builtin", risk: "low",
       description: "Actually generates a real image file from a text prompt using a local Stable Diffusion server, and saves it to the Library. This is the only way to produce a real image — writing a description of one is not a substitute. Call this tool whenever the owner asks for an image to be made/generated/created, even if you'd normally just reply in text.",
       parameters: { type: "object", properties: { prompt: { type: "string" } }, required: ["prompt"] },
     },
     {
-      name: "generate_video", kind: "builtin", risk: "medium",
+      name: "generate_video", kind: "builtin", risk: "low", // same reasoning as generate_image
       description: "Actually generates a real video file (a few seconds long) from a text prompt, or animates a Library image, using local LTX-Video, and saves it to the Library. This is the only way to produce a real video — writing a script, storyboard, or shot description is NOT a substitute and does not count as generating the video. Call this tool whenever the owner asks for a video to be made/generated/created/rendered — do not just describe or narrate one instead. Can take several minutes, longer (up to ~20 min) the very first time while the model downloads.",
       parameters: {
         type: "object",
@@ -568,6 +590,44 @@ async function allTools(ctx: RunContext, advancedToolsEnabled: boolean): Promise
   return advancedToolsEnabled ? all : all.filter((t) => t.risk !== "high");
 }
 
+// How many installed-skill tools to offer the model per turn. With 50+
+// skills installed, sending every skill's schema on every call buried the
+// ~30 built-ins: a 9B local model picked unrelated skills ("what's my
+// favorite drink?" -> generate_archive_manifest) and skipped remember/recall.
+const MAX_SKILL_TOOLS_PER_TURN = 6;
+
+const STOPWORDS = new Set("the a an and or to of for in on at is are was be me my you your it this that with what how can do please make get".split(" "));
+function keywords(text: string): Set<string> {
+  return new Set(text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOPWORDS.has(w)));
+}
+
+/**
+ * The tools actually shown to the model this turn: every built-in and
+ * agent-comms tool, plus only the installed-skill tools whose name/description
+ * overlap the latest user message (top MAX_SKILL_TOOLS_PER_TURN). Skill tools
+ * already called earlier in this turn stay offered so a multi-step skill run
+ * isn't cut off. Execution still resolves against the full list.
+ */
+function toolsForTurn(tools: ToolDef[], messages: OllamaMessage[], transcript: ToolCallRecord[]): ToolDef[] {
+  const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const wanted = keywords(lastUser);
+  const usedNames = new Set(transcript.map((t) => t.name));
+  const scored = tools
+    .filter((t) => t.kind === "skill")
+    .map((t) => {
+      const words = keywords(`${t.name.replace(/_/g, " ")} ${t.description}`);
+      let score = 0;
+      for (const w of wanted) if (words.has(w)) score++;
+      return { t, score: usedNames.has(t.name) ? 1000 : score };
+    })
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_SKILL_TOOLS_PER_TURN)
+    .map((s) => s.t);
+  const chosenSkills = new Set(scored);
+  return tools.filter((t) => t.kind !== "skill" || chosenSkills.has(t));
+}
+
 function toOllamaTools(tools: ToolDef[]): OllamaToolDef[] {
   return tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
 }
@@ -653,9 +713,29 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
           : { ok: false, output: "couldn't queue that for speech" };
       }
       case "recall": {
-        const query = args.query ? String(args.query) : undefined;
-        const found = await storage.getNotes(query, 20, memoryAgentId);
-        return { ok: true, output: found.length ? found.map((n) => `${n.label}: ${n.value}`).join("\n") : "no matching notes" };
+        // Ranked keyword match rather than a raw substring filter: "favorite
+        // drink" has to find a note labelled "favorite_drink", and the long
+        // "Archived chat:" transcripts (often heavy roleplay) must not drown
+        // out the actual facts — dumping them into context derailed replies.
+        const query = String(args.query ?? "").trim();
+        const all = await storage.getNotes(undefined, 500, memoryAgentId);
+        const isArchive = (label: string) => /^archived chat/i.test(label);
+        const wanted = keywords(query.replace(/_/g, " "));
+        const ranked = all
+          .map((n, i) => {
+            const words = keywords(`${n.label} ${n.value}`.replace(/_/g, " "));
+            let score = 0;
+            for (const w of wanted) if (words.has(w)) score++;
+            if (wanted.size === 0) score = 1; // no query: most recent notes
+            if (isArchive(n.label)) score -= 0.5;
+            return { n, score, i };
+          })
+          .filter((r) => r.score > 0)
+          .sort((a, b) => b.score - a.score || a.i - b.i)
+          .slice(0, 8);
+        if (!ranked.length) return { ok: true, output: "no matching notes" };
+        const clip = (s: string) => (s.length > 400 ? s.slice(0, 400) + "…" : s);
+        return { ok: true, output: ranked.map((r) => `${r.n.label}: ${clip(r.n.value)}`).join("\n") };
       }
       case "list_skills": {
         const enabled = (await storage.getSkills()).filter((s) => s.status === "enabled");
@@ -1231,7 +1311,7 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
   const tools = await allTools(ctx, config.advancedToolsEnabled);
   let response;
   try {
-    response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(tools), config.numCtx);
+    response = await chat(config.ollamaHost, config.model, messages, toOllamaTools(toolsForTurn(tools, messages, transcript)), config.numCtx);
   } catch (err) {
     const reply = `Couldn't reach Ollama at ${config.ollamaHost}: ${err instanceof Error ? err.message : String(err)}. Is "ollama serve" running?`;
     await updateMessage(ctx, messageId, reply, transcript.length ? JSON.stringify(transcript) : null);
@@ -1257,9 +1337,23 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
   const calls = assistantMsg.tool_calls ?? [];
 
   if (calls.length === 0) {
-    const reply = stripStrayToolJson(assistantMsg.content ?? "") || summarizeTranscript(transcript) || "(no response)";
+    let raw = assistantMsg.content ?? "";
+    // Thinking models sometimes put the whole answer in their reasoning and
+    // leave content empty after a tool call — the owner then saw "Done —
+    // recall." instead of "your favorite drink is horchata". Ask once more
+    // for a direct reply with thinking off; failing that, use the step's own
+    // reasoning, which in that case IS the answer.
+    if (!stripStrayToolJson(raw.replace(/\[DONE\]/gi, "")).trim() && transcript.length > 0) {
+      try {
+        const retry = await chat(config.ollamaHost, config.model, messages, [], config.numCtx, { think: false });
+        raw = retry.message.content ?? "";
+      } catch { /* fall through to the reasoning text */ }
+      if (!raw.trim() && assistantMsg.thinking?.trim()) raw = assistantMsg.thinking.trim();
+    }
+    const doneSignal = /\[DONE\]/i.test(raw);
+    const reply = stripStrayToolJson(raw.replace(/\s*\[DONE\]\s*/gi, " ").trim()) || summarizeTranscript(transcript) || "(no response)";
     await updateMessage(ctx, messageId, reply, transcript.length ? JSON.stringify(transcript) : null, thinking);
-    return { status: "final", reply, usedTools: transcript.length > 0 };
+    return { status: "final", reply, usedTools: transcript.length > 0, planOpen: planStateOf(transcript), doneSignal };
   }
 
   messages.push({ role: "assistant", content: assistantMsg.content ?? "", tool_calls: calls });
@@ -1377,8 +1471,9 @@ export async function runAgentTurn(taskId: number, userMessage: string, imageCre
 // Stop and the approval gates remain the real circuit breakers.
 const AUTO_CONTINUE_MAX = 30;
 const AUTO_CONTINUE_NUDGE =
-  "Continue with this task on your own — don't wait for me. Take the next concrete step now (call whatever tools you need). " +
-  "When the task is genuinely, fully complete — or you truly need my input to go further — end your message with the exact token [DONE] and stop.";
+  "Keep going on your plan without waiting for me: do the next unfinished step now, then update the plan with set_plan. " +
+  "Don't repeat steps you've already done or re-check things for no reason. When every step is done, give me your final answer " +
+  "and end it with the exact token [DONE]. If you truly need my input, ask and end with [DONE].";
 
 /**
  * Runs one task turn, then — if the owner has auto-continue on — keeps
@@ -1396,16 +1491,19 @@ async function runTaskTurnLoop(ctx: RunContext, taskId: number, config: AgentCon
   await finalizeContext(ctx, result.status);
 
   let n = 0;
-  // Only keep going while she's actually working: a turn that called no tools
-  // is conversation (or a finished job), and nudging it just makes a small
-  // local model invent busywork — "I'm on it!", placeholder tool-call JSON.
+  // Only keep going while there's an unfinished plan. Nudging anything else —
+  // small talk, or a one-shot action like "remember X" — just makes a small
+  // local model invent busywork (measured: five rounds of check_audit_log and
+  // recall("plan") after a single remember). Plan state carries across rounds
+  // since each continuation starts a fresh transcript.
+  let planOpen = result.planOpen ?? false;
   while (
     config.autoContinue &&
     result.status === "final" &&
     result.usedTools &&
-    !!result.reply &&
+    planOpen &&
+    !result.doneSignal &&
     n < AUTO_CONTINUE_MAX &&
-    !/\[DONE\]/i.test(result.reply) &&
     !stopWasRequested(ctx)
   ) {
     n++;
@@ -1416,6 +1514,7 @@ async function runTaskTurnLoop(ctx: RunContext, taskId: number, config: AgentCon
     messageId = await createPlaceholderMessage(ctx);
     result = await runLoop(ctx, messages, config, [], 0, messageId);
     await finalizeContext(ctx, result.status);
+    if (result.planOpen !== undefined) planOpen = result.planOpen;
   }
 }
 

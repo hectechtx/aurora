@@ -10,8 +10,11 @@
 // of the manifest and file listing at install time (see skills/installer.ts
 // and the approvals UI), not this runtime.
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
+import { SKILLS_DIR } from "../paths";
 import type { InstalledSkill } from "@shared/schema";
+import type { Storage } from "../storage-types";
 
 const TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_CHARS = 50_000;
@@ -29,6 +32,32 @@ export interface SkillRunResult {
   durationMs: number;
 }
 
+/**
+ * The skill's folder on disk. sourcePath is stored as an absolute path at
+ * install time, so it goes stale when the data dir moves (it pointed into a
+ * %APPDATA% that a Windows reset wiped, while the files themselves survived
+ * under AURORA_HOME). A missing cwd makes spawn fail with a bare ENOENT, so
+ * fall back to SKILLS_DIR/<folder name> when the stored path is gone.
+ */
+export function resolveSkillDir(skill: InstalledSkill): string {
+  if (fs.existsSync(skill.sourcePath)) return skill.sourcePath;
+  const moved = path.join(SKILLS_DIR, path.basename(skill.sourcePath));
+  return fs.existsSync(moved) ? moved : skill.sourcePath;
+}
+
+/** One-shot startup fix: rewrites stale stored skill paths to where the files actually are now, so delete/disable (lifecycle.ts) act on the real folder too. Returns how many were repaired. */
+export async function repairSkillPaths(storage: Storage): Promise<number> {
+  let fixed = 0;
+  for (const skill of await storage.getSkills()) {
+    const actual = resolveSkillDir(skill);
+    if (actual !== skill.sourcePath) {
+      await storage.setSkillSourcePath(skill.id, actual);
+      fixed++;
+    }
+  }
+  return fixed;
+}
+
 export async function runSkillTool(skill: InstalledSkill, toolName: string, args: Record<string, unknown>): Promise<SkillRunResult> {
   const manifest = JSON.parse(skill.manifest) as { entrypoint?: string };
   // Knowledge-only skills have no entrypoint and expose no tools, so this
@@ -37,7 +66,8 @@ export async function runSkillTool(skill: InstalledSkill, toolName: string, args
   if (!manifest.entrypoint) {
     return { ok: false, error: `skill "${skill.name}" has no entrypoint (knowledge-only skill?)`, stderr: "", timedOut: false, durationMs: 0 };
   }
-  const entrypointPath = path.join(skill.sourcePath, manifest.entrypoint);
+  const skillDir = resolveSkillDir(skill);
+  const entrypointPath = path.join(skillDir, manifest.entrypoint);
   const start = Date.now();
 
   return new Promise((resolve) => {
@@ -52,7 +82,7 @@ export async function runSkillTool(skill: InstalledSkill, toolName: string, args
     // ELECTRON_RUN_AS_NODE makes Electron's binary behave as plain Node when
     // spawned as a child process; harmless no-op for a real node.exe.
     const child = spawn(process.execPath, [entrypointPath], {
-      cwd: skill.sourcePath,
+      cwd: skillDir,
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
     });
 

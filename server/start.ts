@@ -8,6 +8,8 @@ import { startDataDriveWatch } from "./datadrive";
 import { startScheduler } from "./scheduler";
 import { startComfyUi } from "./comfyui";
 import { startTelegramBot } from "./telegram";
+import { repairSkillPaths } from "./skills/runner";
+import { SKILLS_DIR } from "./paths";
 
 // Best-effort "open this URL in the default browser" — never throws.
 function openBrowser(url: string) {
@@ -47,6 +49,8 @@ export async function startServer(opts: StartServerOptions = {}): Promise<{ port
   const shouldOpenBrowser = opts.openBrowser ?? true;
 
   const storage = new DatabaseStorage();
+  const repairedSkills = await repairSkillPaths(storage).catch(() => 0);
+  if (repairedSkills) log(`skills: repointed ${repairedSkills} skill folder(s) to ${SKILLS_DIR}`);
   const app = await createApp(storage);
   const httpServer = createServer(app);
   startScheduler();

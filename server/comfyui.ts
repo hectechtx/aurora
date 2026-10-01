@@ -53,6 +53,12 @@ export async function startComfyUi(): Promise<void> {
   }
   if (await isPortTaken(COMFYUI_PORT)) {
     log(`comfyui: already running on ${COMFYUI_PORT}`);
+    // On an app restart the port can still belong to the old ComfyUI that's
+    // shutting down — look again shortly and start a fresh one if it's gone.
+    setTimeout(() => {
+      fetch(`http://127.0.0.1:${COMFYUI_PORT}/`, { signal: AbortSignal.timeout(5000) })
+        .catch(async () => { if (!(await isPortTaken(COMFYUI_PORT))) void startComfyUi(); });
+    }, 25_000);
     return;
   }
 

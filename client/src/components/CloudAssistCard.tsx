@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Cloud, ExternalLink } from "lucide-react";
 
 interface Provider {
-  id: string; name: string; model: string; enabled: boolean; hasKey: boolean; rpm: number; rpd: number;
+  id: string; name: string; model: string; enabled: boolean; hasKey: boolean; keyless: boolean; rpm: number; rpd: number;
   signupUrl: string; note: string; usedToday: number; lastError: string; coolingDown: boolean;
 }
 interface CloudData { mode: "off" | "busy"; providers: Provider[]; gpu: { busy: boolean; job: string | null; waiting: number } }
@@ -41,7 +41,7 @@ export function CloudAssistCard() {
     setModels((m) => ({ ...m, [p.id]: r.models ?? [] }));
   }
 
-  const ready = (data?.providers ?? []).filter((p) => p.hasKey && p.enabled).length;
+  const ready = (data?.providers ?? []).filter((p) => (p.hasKey || p.keyless) && p.enabled).length;
   return (
     <Card id="cloud" className="p-5 space-y-4 scroll-mt-16">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -63,7 +63,7 @@ export function CloudAssistCard() {
       </div>
       <div className="space-y-2">
         {(data?.providers ?? []).map((p) => (
-          <div key={p.id} className={cn("rounded-lg border p-3", p.hasKey && p.enabled ? "border-primary/40" : "border-border")}>
+          <div key={p.id} className={cn("rounded-lg border p-3", (p.hasKey || p.keyless) && p.enabled ? "border-primary/40" : "border-border")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-medium">{p.name} {p.hasKey && <span className="ml-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">key saved</span>}</div>
@@ -71,7 +71,7 @@ export function CloudAssistCard() {
               </div>
               <div className="flex items-center gap-2">
                 <a href={p.signupUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">Get a free key <ExternalLink size={11} /></a>
-                {p.hasKey && <Switch label={`Use ${p.name}`} checked={p.enabled} onCheckedChange={() => void save(p, { enabled: !p.enabled })} />}
+                {(p.hasKey || p.keyless) && <Switch label={`Use ${p.name}`} checked={p.enabled} onCheckedChange={() => void save(p, { enabled: !p.enabled })} />}
               </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">

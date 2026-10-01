@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS cloud_providers (
 );
 CREATE TABLE IF NOT EXISTS cloud_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
+// Some providers answer without a key (anonymous, low limits).
+try { sqlite.exec("ALTER TABLE cloud_providers ADD COLUMN keyless INTEGER NOT NULL DEFAULT 0"); } catch { /* already there */ }
 
 /** Free tiers as published in the list (2026-10-01). Limits are the provider's own; we stay under them. */
 const PRESETS = [
@@ -30,19 +32,25 @@ const PRESETS = [
   { id: "mistral", name: "Mistral AI", base: "https://api.mistral.ai/v1", model: "mistral-small-latest", rpm: 2, rpd: 500, signup: "https://console.mistral.ai/api-keys", note: "No credit card." },
   { id: "openrouter", name: "OpenRouter (free models)", base: "https://openrouter.ai/api/v1", model: "", rpm: 20, rpd: 50, signup: "https://openrouter.ai/keys", note: "Many ':free' models in one place." },
   { id: "sambanova", name: "SambaNova", base: "https://api.sambanova.ai/v1", model: "", rpm: 20, rpd: 20, signup: "https://cloud.sambanova.ai", note: "DeepSeek / Llama. Registration." },
+  { id: "ovh", name: "OVHcloud AI Endpoints (no key needed)", base: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", model: "Meta-Llama-3_3-70B-Instruct", rpm: 2, rpd: 1000, signup: "https://endpoints.ai.cloud.ovh.net", note: "Works with no account at 2 requests/min (Llama 3.3 70B). A free key raises the limit.", keyless: true },
 ] as const;
 
 for (const [i, p] of PRESETS.entries()) {
+  const keyless = "keyless" in p && p.keyless ? 1 : 0;
+  // Keyless providers start switched OFF: sending work to an outside server is the owner's call.
   sqlite.prepare(
-    `INSERT INTO cloud_providers (id, name, base_url, model, rpm, rpd, priority, signup_url, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET signup_url = excluded.signup_url, note = excluded.note`,
-  ).run(p.id, p.name, p.base, p.model, p.rpm, p.rpd, i, p.signup, p.note);
+    `INSERT INTO cloud_providers (id, name, base_url, model, rpm, rpd, priority, signup_url, note, keyless, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET signup_url = excluded.signup_url, note = excluded.note, keyless = excluded.keyless`,
+  ).run(p.id, p.name, p.base, p.model, p.rpm, p.rpd, i, p.signup, p.note, keyless, keyless ? 0 : 1);
 }
 
 interface Row {
   id: string; name: string; base_url: string; api_key: string; model: string; enabled: number; rpm: number; rpd: number;
-  priority: number; signup_url: string; note: string; used_day: string; used_count: number; last_error: string;
+  priority: number; signup_url: string; note: string; used_day: string; used_count: number; last_error: string; keyless: number;
 }
+/** Usable: switched on, and has a key or doesn't need one. */
+const usable = (r: Row) => !!r.enabled && (!!r.api_key || !!r.keyless);
+const authHeaders = (r: Row): Record<string, string> => (r.api_key ? { Authorization: `Bearer ${r.api_key}` } : {});
 
 export type CloudMode = "off" | "busy";
 export function getCloudMode(): CloudMode {
@@ -64,7 +72,7 @@ function rows(): Row[] {
 /** For the Settings page — keys are never sent back, only whether one is set. */
 export function listProviders() {
   return rows().map((r) => ({
-    id: r.id, name: r.name, baseUrl: r.base_url, model: r.model, enabled: !!r.enabled, hasKey: !!r.api_key,
+    id: r.id, name: r.name, baseUrl: r.base_url, model: r.model, enabled: !!r.enabled, hasKey: !!r.api_key, keyless: !!r.keyless,
     rpm: r.rpm, rpd: r.rpd, signupUrl: r.signup_url, note: r.note,
     usedToday: r.used_day === today() ? r.used_count : 0, lastError: r.last_error,
     coolingDown: (cooldownUntil.get(r.id) ?? 0) > Date.now(),
@@ -84,8 +92,8 @@ function row(id: string): Row | undefined {
 /** The provider's model list (needs a key), so the owner can pick from what's really offered. */
 export async function providerModels(id: string): Promise<string[]> {
   const r = row(id);
-  if (!r?.api_key) return [];
-  const res = await fetch(`${r.base_url}/models`, { headers: { Authorization: `Bearer ${r.api_key}` }, signal: AbortSignal.timeout(15_000) });
+  if (!r || (!r.api_key && !r.keyless)) return [];
+  const res = await fetch(`${r.base_url}/models`, { headers: authHeaders(r), signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`${r.name}: ${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}`);
   const j = (await res.json()) as any;
   const ids: string[] = (j.data ?? j.models ?? []).map((m: any) => String(m.id ?? m.name ?? "")).filter(Boolean);
@@ -156,7 +164,7 @@ function fromOpenAI(msg: any): OllamaMessage {
 }
 
 export function cloudAvailable(): boolean {
-  return getCloudMode() !== "off" && rows().some((r) => r.enabled && r.api_key && withinLimits(r));
+  return getCloudMode() !== "off" && rows().some((r) => usable(r) && withinLimits(r));
 }
 
 /**
@@ -168,14 +176,14 @@ export async function cloudChat(messages: OllamaMessage[], tools: OllamaToolDef[
   if (getCloudMode() === "off") return null;
   if (messages.some((m) => m.images?.length)) return null; // images stay local
   for (const r of rows()) {
-    if (!r.enabled || !r.api_key || !withinLimits(r)) continue;
+    if (!usable(r) || !withinLimits(r)) continue;
     try {
       const model = await ensureModel(r);
       if (!model) continue;
       recordUse(r);
       const res = await fetch(`${r.base_url}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${r.api_key}` },
+        headers: { "Content-Type": "application/json", ...authHeaders(r) },
         body: JSON.stringify({
           model, messages: toOpenAI(messages), temperature: 0.7,
           ...(tools.length ? { tools, tool_choice: "auto" } : {}),
@@ -206,11 +214,11 @@ export async function cloudChat(messages: OllamaMessage[], tools: OllamaToolDef[
 /** Settings "Test" button: one tiny request to confirm the key works. */
 export async function testProvider(id: string): Promise<string> {
   const r = row(id);
-  if (!r?.api_key) return "add an API key first";
+  if (!r || (!r.api_key && !r.keyless)) return "add an API key first";
   const model = await ensureModel(r);
   const res = await fetch(`${r.base_url}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${r.api_key}` },
+    headers: { "Content-Type": "application/json", ...authHeaders(r) },
     body: JSON.stringify({ model, messages: [{ role: "user", content: "Reply with just: ok" }], max_tokens: 5 }),
     signal: AbortSignal.timeout(30_000),
   });

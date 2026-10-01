@@ -15,7 +15,7 @@ const PIPELINES: Def[] = [
       { agent: "riley", instruction: "Find today's best video opportunity for our kid-friendly channel (trending_videos, youtube_search). Pick ONE idea and give the title, hook, angle for ages 4-8, and 5-7 story beats." },
       { agent: "Nat the content creator", instruction: "Write the full narration script for a ~2 minute episode from this idea: a hook in the first line, the beats in order, a friendly sign-off. Spoken words only — no stage directions. Save it with save_document." },
       { agent: "ALI", instruction: "Review this script for hook strength, pacing, clarity and age-appropriateness. Fix what needs fixing yourself and output ONLY the final polished narration script." },
-      { agent: "Mandy", instruction: "Produce this script as a finished video with produce_video (landscape, captions on, ~2 minutes, script = the script you received, a catchy title). Then put it in the Outbox with save_deliverable using its mediaId, plus a YouTube title, description and tags." },
+      { agent: "Mandy", instruction: "Produce this script as a finished video with produce_video (landscape, captions on, visual_style = 'bright colorful 3D cartoon, kid-friendly, no realistic people', ~2 minutes, script = the script you received, a catchy title). Then put it in the Outbox with save_deliverable using its mediaId, plus a YouTube title, description and tags." },
     ],
   },
   {
@@ -24,7 +24,7 @@ const PIPELINES: Def[] = [
       { agent: "Leo Vance", instruction: "Plan the next episode of our ongoing kids series (create the series bible with save_document if none exists yet): episode title, what happens, and how it continues from last time." },
       { agent: "Nat the content creator", instruction: "Write the full ~5 minute narration script for this episode. Spoken words only. Save it with save_document." },
       { agent: "ALI", instruction: "Polish this script and output ONLY the final narration script." },
-      { agent: "Mandy", instruction: "Produce it with produce_video (landscape, captions on, ~5 minutes) and send it to the Outbox with save_deliverable (mediaId) with title, description and tags." },
+      { agent: "Mandy", instruction: "Produce it with produce_video (landscape, captions on, visual_style = 'bright colorful 3D cartoon, kid-friendly, no realistic people', ~5 minutes) and send it to the Outbox with save_deliverable (mediaId) with title, description and tags." },
     ],
   },
   {
@@ -73,6 +73,25 @@ const PIPELINES: Def[] = [
     steps: [
       { agent: "Victor Hale", instruction: "Review this week's Outbox (list_outbox) for legal risk: copyright/music, kids-content rules (COPPA, 'made for kids'), sponsorship disclosure, claims in product listings. List issues with concrete fixes and say when a licensed attorney is needed." },
       { agent: "Nina Ortiz", instruction: "Add this week's finance picture from treasury_summary (real confirmed numbers only) and send the combined legal + finance review to the Outbox with save_deliverable." },
+    ],
+  },
+  {
+    name: "Records: Daily Song", schedule: "daily",
+    steps: [
+      { agent: "Skye Monroe", instruction: "Create today's song concept for AURORA Records' artist NOVA LUX (check trending_videos with categories ['music video'] for what's resonating, but never copy a song): title, theme, genre, mood, and the full chorus." },
+      { agent: "Jonah Reed", instruction: "Write the complete lyrics around this chorus: [verse] 1, [chorus], [verse] 2, [chorus], [bridge], [chorus]. Output the title, the style line and the full tagged lyrics." },
+      { agent: "Dre Coleman", instruction: "Produce the song with make_song: title, a precise style line (genre, mood, instruments, tempo, vocal type), the full lyrics, ~120 seconds. Report its Library id and the style you chose." },
+      { agent: "NOVA LUX", instruction: "Make the cover art with generate_image (neon aurora colors, starlight, artwork only — no text, no realistic people) and write a 2-3 sentence release note in NOVA's voice. Pass along the song's Library id." },
+      { agent: "Maya Torres", instruction: "Package the release: one save_deliverable with mediaId = the song's Library id, containing title, artist NOVA LUX, genre, lyrics, credits, the AI-generated disclosure, the cover art reference, and a distribution checklist for the owner." },
+    ],
+  },
+  {
+    name: "Insights: Weekly Venture Pitch", schedule: "weekly",
+    steps: [
+      { agent: "Felix Wang", instruction: "Find the single most promising business we could start with our existing companies and tools (content, music, store, clipping, research, marketing). Gather real market data with sources: demand, competitors, pricing, audience." },
+      { agent: "Rosa Delgado", instruction: "Model the economics of this idea: startup costs, pricing, unit economics, break-even, conservative 3-month revenue estimate — all labelled as estimates." },
+      { agent: "Imani Brooks", instruction: "Write the full business plan (opportunity, customer, product, how we'd run it, team of 2-5 roles, a standing weekly or daily workflow, costs, revenue path, risks) and score it 1-10 as a no-brainer, with reasons." },
+      { agent: "AURORA", instruction: "Decide as lead. If the plan scores 8+ AND is legal, low-cost, doable with our tools and has a clear revenue path, bring it to life with found_company (team with names/roles/personas/jobs, and a pipeline whose steps use those team members). Otherwise send the plan to the owner with save_deliverable and say why it isn't a no-brainer yet." },
     ],
   },
   {

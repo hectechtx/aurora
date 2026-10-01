@@ -47,6 +47,8 @@ export interface GenerateStoryboardOptions {
   script?: string;
   /** Burn captions (the narration, a few words at a time) into the video — what shorts/kids content expects. */
   captions?: boolean;
+  /** One visual style applied to every scene (e.g. "bright colorful 3D cartoon") so a channel looks consistent. */
+  visualStyle?: string;
 }
 
 export interface StoryboardResult {
@@ -301,7 +303,10 @@ export async function generateStoryboard(opts: GenerateStoryboardOptions, hooks:
   }
 
   onProgress?.("Writing the script…");
-  const scenes = await planScenes(opts.ollamaHost, opts.ollamaModel, opts.topic, opts.targetMinutes, opts.mode, opts.script);
+  const planned = await planScenes(opts.ollamaHost, opts.ollamaModel, opts.topic, opts.targetMinutes, opts.mode, opts.script);
+  const scenes = opts.visualStyle?.trim()
+    ? planned.map((sc) => ({ ...sc, visualPrompt: `${sc.visualPrompt}, ${opts.visualStyle!.trim()}` }))
+    : planned;
 
   const workDir = path.join(os.tmpdir(), `storyboard-${randomUUID()}`);
   fs.mkdirSync(workDir, { recursive: true });

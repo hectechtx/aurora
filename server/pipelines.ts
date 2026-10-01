@@ -165,16 +165,24 @@ export async function onQueueItemFinished(queueItemId: number, status: "final" |
     return;
   }
 
-  // Last stage done: deliver.
+  // Last stage done: deliver — unless the final agent already put its own
+  // deliverable in the Outbox during this run (measured: the studio's video
+  // director delivered the episode with the video attached, and the pipeline
+  // then added a text-only duplicate). Otherwise attach the newest media
+  // that agent produced during the run.
   await storage.updatePipelineRun(run.id, { status: "done", output: reply, finishedAt: Date.now() });
-  const stamp = new Date().toLocaleString();
-  await storage.createDeliverable({
-    agentId: item.agentId,
-    title: `${pipeline.name} — ${stamp}`,
-    description: `Final output of the "${pipeline.name}" pipeline (${stages.length} step${stages.length === 1 ? "" : "s"}).`,
-    tags: JSON.stringify(["pipeline"]),
-    body: reply,
-  });
+  const alreadyDelivered = (await storage.getDeliverables(item.agentId)).some((d) => d.createdAt >= run.startedAt);
+  if (!alreadyDelivered) {
+    const media = (await storage.getCreations(50)).find((c) => c.agentId === item.agentId && c.createdAt >= run.startedAt && !c.deletedAt);
+    await storage.createDeliverable({
+      agentId: item.agentId,
+      title: `${pipeline.name} — ${new Date().toLocaleString()}`,
+      description: `Final output of the "${pipeline.name}" pipeline (${stages.length} step${stages.length === 1 ? "" : "s"}).`,
+      tags: JSON.stringify(["pipeline"]),
+      body: reply,
+      creationId: media?.id ?? null,
+    });
+  }
   await storage.log(`pipeline done: ${pipeline.name}`, `run #${run.id}`);
   const company = agent?.companyId != null ? getCompany(agent.companyId) : undefined;
   addWorldEvent("delivered", `${company?.name ?? "AURORA HQ"} delivered "${pipeline.name}" (${stages.length} step${stages.length === 1 ? "" : "s"}, finished by ${agentName}).`, company?.id ?? null);

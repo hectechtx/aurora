@@ -21,9 +21,12 @@ import { webSearch, webFetch, fetchImageBytes } from "./web-tools";
 import { browseInteract, BrowserToolError, READ_ONLY_ACTIONS, type BrowseAction } from "./browser-tool";
 import { trendingVideos, youtubeSearch, videoTranscript, newsHeadlines, saveDocument, makeVoiceover, VOICE_IDS } from "./content-tools";
 import { getCompanies } from "./companies";
+import { leadInbox, addDeliverableTag, foundCompany, LEAD_REVIEWED_TAG, type FoundingInput } from "./lead";
 import { timestampedTranscript, makeClip } from "./clips";
 import { addLedgerEntry, treasurySummary, addProduct, listProducts, newImageName, artworkPrompt, composeDesign } from "./commerce";
-import { generateStoryboard } from "./storyboard";
+import { generateStoryboard, runFfmpeg } from "./storyboard";
+import { generateMusic, isMusicGenInstalled } from "./musicgen";
+import os from "node:os";
 import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
 import { getCreationsDir, SELF_SOURCE_DIR } from "./paths";
@@ -260,6 +263,7 @@ function builtinTools(): ToolDef[] {
           orientation: { type: "string", enum: ["landscape", "portrait"], description: "landscape for YouTube, portrait for Shorts/TikTok/Reels" },
           captions: { type: "boolean", description: "Burn captions in (default true)" },
           voice: { type: "string", enum: VOICE_IDS },
+          visual_style: { type: "string", description: "One look for every scene, e.g. 'bright colorful 3D cartoon, kid-friendly'" },
         },
         required: ["title"],
       },
@@ -293,6 +297,22 @@ function builtinTools(): ToolDef[] {
           design_text: { type: "string", description: "Optional slogan printed under the artwork in a real font (exact spelling), max 40 chars" },
         },
         required: ["name", "description", "price"],
+      },
+    },
+    {
+      name: "make_song", kind: "builtin", risk: "low",
+      description:
+        "Produce a real song with the local music model and save it to the Library as an MP3: give the style (genre, mood, instruments, tempo, vocal type) and full lyrics " +
+        "with section tags like [verse], [chorus], [bridge] — or no lyrics for an instrumental. Takes a few minutes. Returns the Library id.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          style: { type: "string", description: "e.g. 'upbeat pop, female vocals, catchy synth hook, 120 bpm'" },
+          lyrics: { type: "string", description: "Full lyrics with [verse]/[chorus]/[bridge] tags; omit for instrumental" },
+          seconds: { type: "number", description: "Length, 30-240 (default 120)" },
+        },
+        required: ["title", "style"],
       },
     },
     {
@@ -821,6 +841,67 @@ async function teamworkTools(ctx: RunContext): Promise<ToolDef[]> {
       parameters: { type: "object", properties: {} },
     },
   ];
+  // AURORA's authority as lead (chat AURORA, or the overseer agent): decide
+  // requests, review work, answer agents, found companies.
+  const self = ctx.type === "agent" ? everyone.find((a) => a.id === ctx.agentId) : null;
+  if (ctx.type === "task" || self?.isOverseer) {
+    tools.push(
+      {
+        name: "check_inbox", kind: "builtin", risk: "low",
+        description: "As lead: see everything waiting on a decision — requests awaiting approval, agents' questions, and finished work nobody has reviewed yet.",
+        parameters: { type: "object", properties: {} },
+      },
+      {
+        name: "decide_request", kind: "builtin", risk: "low",
+        description: "As lead: approve or deny a pending request (approval #id from check_inbox). Approving resumes the agent's work. Destructive actions (deleting files, formatting, force-push) and skill installs can only be decided by the owner.",
+        parameters: {
+          type: "object",
+          properties: { approval_id: { type: "number" }, decision: { type: "string", enum: ["approve", "deny"] }, reason: { type: "string" } },
+          required: ["approval_id", "decision"],
+        },
+      },
+      {
+        name: "review_work", kind: "builtin", risk: "low",
+        description: "As lead: review a finished deliverable (#id from check_inbox). 'approve' marks it good to go for the owner; 'revise' sends it back to the agent who made it with your specific feedback.",
+        parameters: {
+          type: "object",
+          properties: { deliverable_id: { type: "number" }, verdict: { type: "string", enum: ["approve", "revise"] }, feedback: { type: "string" } },
+          required: ["deliverable_id", "verdict"],
+        },
+      },
+      {
+        name: "answer_agent", kind: "builtin", risk: "low",
+        description: "As lead: answer an agent's question (question #id from check_inbox) on the owner's behalf. If it needs the owner (money, accounts, contracts, personal decisions), say so in your answer instead of deciding.",
+        parameters: { type: "object", properties: { question_id: { type: "number" }, answer: { type: "string" } }, required: ["question_id", "answer"] },
+      },
+      {
+        name: "found_company", kind: "builtin", risk: "low",
+        description:
+          "As lead: bring a no-brainer business to life in town — create a new real company with a 2-5 person team (each with name, role, short persona, job) and a standing pipeline that produces its results. " +
+          "Only for ideas that are clearly worth it: legal, low startup cost, doable with our tools, with a real path to revenue. Limit: one new company per week.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string" }, industry: { type: "string" }, mission: { type: "string" },
+            reason: { type: "string", description: "Why it's a no-brainer (market data, costs, revenue path)" },
+            team: {
+              type: "array",
+              items: { type: "object", properties: { name: { type: "string" }, role: { type: "string" }, persona: { type: "string" }, job: { type: "string" }, lead: { type: "boolean" } }, required: ["name", "role", "job"] },
+            },
+            pipeline: {
+              type: "object",
+              properties: {
+                name: { type: "string" }, schedule: { type: "string", enum: ["daily", "weekly"] },
+                steps: { type: "array", items: { type: "object", properties: { agent: { type: "string", description: "Name of a team member above" }, instruction: { type: "string" } }, required: ["agent", "instruction"] } },
+              },
+              required: ["name", "steps"],
+            },
+          },
+          required: ["name", "industry", "mission", "reason", "team", "pipeline"],
+        },
+      },
+    );
+  }
   if (ctx.type === "task") {
     tools.unshift({
       name: "delegate_to_agent", kind: "builtin", risk: "low", contexts: ["task"],
@@ -1359,6 +1440,7 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
           topic, script, targetMinutes: minutes, mode: "images",
           orientation: args.orientation === "portrait" ? "portrait" : "landscape", voiceId: voice,
           ollamaHost: config.ollamaHost, ollamaModel: config.model, imageGenHost: config.imageGenHost, captions: args.captions !== false,
+          visualStyle: args.visual_style ? String(args.visual_style) : undefined,
         }, { shouldStop: () => stopWasRequested(ctx) });
         const filename = `${randomUUID()}.mp4`;
         fs.writeFileSync(path.join(getCreationsDir(), filename), result.buffer);
@@ -1453,6 +1535,89 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
           kind: "audio", prompt: text.slice(0, 500), filePath: filename, title: `Voiceover (${voice})`,
         });
         return { ok: true, output: `voiceover saved to the Library as ${filename} (voice ${voice})` };
+      }
+      case "make_song": {
+        if (!isMusicGenInstalled()) return { ok: false, output: "music generation isn't set up yet (Settings → Music generation)" };
+        const title = String(args.title ?? "Untitled").slice(0, 120);
+        const wav = await generateMusic({
+          prompt: String(args.style ?? "pop"), lyrics: args.lyrics ? String(args.lyrics) : undefined,
+          durationSeconds: Math.max(30, Math.min(240, Number(args.seconds) || 120)), ollamaHost: config.ollamaHost,
+        });
+        // WAV -> MP3 so songs are a normal, shareable size.
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "aurora-song-"));
+        let filename = `song-${randomUUID()}.mp3`;
+        try {
+          fs.writeFileSync(path.join(tmp, "in.wav"), wav);
+          await runFfmpeg(["-y", "-i", "in.wav", "-codec:a", "libmp3lame", "-b:a", "192k", "out.mp3"], 300_000, tmp);
+          fs.copyFileSync(path.join(tmp, "out.mp3"), path.join(getCreationsDir(), filename));
+        } catch {
+          filename = filename.replace(/\.mp3$/, ".wav");
+          fs.writeFileSync(path.join(getCreationsDir(), filename), wav);
+        } finally {
+          fs.rmSync(tmp, { recursive: true, force: true });
+        }
+        const creation = await storage.createCreation({
+          taskId: ctx.type === "task" ? ctx.taskId : undefined, agentId: memoryAgentId ?? undefined,
+          kind: "audio", prompt: `${title} — ${String(args.style ?? "")}`.slice(0, 500), filePath: filename, title,
+        });
+        return { ok: true, output: `Produced "${title}" — saved to the Library as #${creation.id} (use mediaId ${creation.id} with save_deliverable).` };
+      }
+      case "check_inbox":
+        return { ok: true, output: await leadInbox() };
+      case "decide_request": {
+        const id = Number(args.approval_id);
+        const decision = args.decision === "approve" ? "approved" : args.decision === "deny" ? "denied" : null;
+        if (!decision) return { ok: false, output: "decision must be approve or deny" };
+        const approval = await storage.getApproval(id);
+        if (!approval || approval.status !== "pending") return { ok: false, output: `no pending request #${id}` };
+        if (approval.targetType !== "tool_call") return { ok: false, output: "skill installs can only be decided by the owner" };
+        let callArgs = "";
+        try { callArgs = JSON.stringify((JSON.parse(approval.detail) as { call?: { args?: unknown } }).call?.args ?? {}); } catch { /* unreadable detail */ }
+        if (decision === "approved" && DESTRUCTIVE.test(callArgs)) {
+          return { ok: false, output: `request #${id} is destructive (${approval.action.slice(0, 80)}) — only the owner can approve that. Leave it for them or deny it.` };
+        }
+        const prepared = await beginResumeAfterApproval(id, decision);
+        finishResumeAfterApproval(prepared, decision).catch((err) => storage.log("resume after AURORA decision failed", err instanceof Error ? err.message : String(err), "error").catch(() => {}));
+        await storage.log(`AURORA ${decision} request #${id}`, `${approval.action.slice(0, 120)} — ${String(args.reason ?? "")}`.slice(0, 300), "ok", "AURORA");
+        return { ok: true, output: `Request #${id} ${decision}; the agent's work is resuming.` };
+      }
+      case "review_work": {
+        const id = Number(args.deliverable_id);
+        const d = await storage.getDeliverable(id);
+        if (!d) return { ok: false, output: `no deliverable #${id}` };
+        const feedback = String(args.feedback ?? "").trim();
+        addDeliverableTag(id, LEAD_REVIEWED_TAG);
+        if (args.verdict === "revise") {
+          if (!feedback) return { ok: false, output: "say what needs to change" };
+          const lead = (await storage.getAgents()).find((a) => a.isOverseer);
+          await storage.createQueueItem(d.agentId,
+            `[Revision requested by AURORA] for "${d.title}": ${feedback}\n\nYour previous version:\n${d.body.slice(0, 3000)}\n\nMake these changes and save the improved version with save_deliverable.`,
+            { sourceAgentId: lead?.id });
+          await storage.updateDeliverable(id, "archived");
+          await storage.log(`AURORA sent back: ${d.title}`, feedback.slice(0, 200), "ok", "AURORA");
+          return { ok: true, output: `Sent "${d.title}" back for revision with your feedback; the agent will redo it.` };
+        }
+        await storage.log(`AURORA approved: ${d.title}`, feedback.slice(0, 200), "ok", "AURORA");
+        return { ok: true, output: `Approved "${d.title}" — it's marked reviewed for the owner.` };
+      }
+      case "answer_agent": {
+        const id = Number(args.question_id);
+        const answer = String(args.answer ?? "").trim();
+        const d = await storage.getDeliverable(id);
+        if (!d || !answer) return { ok: false, output: "need a valid question id and an answer" };
+        await storage.createQueueItem(d.agentId, `AURORA answered your question on the owner's behalf:\n\nQ: ${d.body}\n\nA: ${answer}\n\nAct on this answer.`);
+        await storage.updateDeliverable(id, "posted");
+        await storage.log(`AURORA answered: ${d.title}`, answer.slice(0, 200), "ok", "AURORA");
+        return { ok: true, output: "Answered — the agent will act on it." };
+      }
+      case "found_company": {
+        const team = Array.isArray(args.team) ? args.team as FoundingInput["team"] : [];
+        const pipeline = (args.pipeline ?? {}) as Partial<FoundingInput["pipeline"]>;
+        const r = await foundCompany({
+          name: String(args.name ?? ""), industry: String(args.industry ?? ""), mission: String(args.mission ?? ""), reason: String(args.reason ?? ""),
+          team, pipeline: { name: String(pipeline.name ?? ""), schedule: String(pipeline.schedule ?? "weekly"), steps: Array.isArray(pipeline.steps) ? pipeline.steps : [] },
+        });
+        return { ok: r.ok, output: r.message };
       }
       case "delegate_to_agent": {
         if (ctx.type !== "task") return { ok: false, output: "delegate_to_agent is for chats — agents use handoff_to_agent" };

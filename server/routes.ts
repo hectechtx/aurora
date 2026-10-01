@@ -54,6 +54,7 @@ import { parseStages, describeSchedule, parseSchedule, upsertPipeline, startPipe
 import { recentChatter } from "./world";
 import { getCompanies, getResidents, getWorldEvents } from "./companies";
 import { currentSimDay } from "./simulation";
+import { treasurySummary, listLedger, addLedgerEntry, setLedgerStatus, deleteLedgerEntry, importLedgerCsv, listProducts, updateProduct, deleteProduct, shopifyCsv, exportStoreSite } from "./commerce";
 import { log } from "./app";
 
 /** Parses a route :id param, writing a 400 and returning null if it isn't a real integer — a malformed/non-numeric id would otherwise flow into a Drizzle query as NaN. */
@@ -675,6 +676,83 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
     const [rels, all] = await Promise.all([storage().getRelationships(id), storage().getAgents()]);
     const nameById = new Map(all.map((a) => [a.id, a.name] as const));
     res.json(rels.map((r) => ({ ...r, otherAgentName: nameById.get(r.otherAgentId) ?? "unknown" })));
+  });
+
+  // ---- Treasury (real money only; see commerce.ts) ----
+  app.get("/api/treasury", (_req, res) => {
+    res.json({ summary: treasurySummary(), entries: listLedger(300), companies: getCompanies().filter((c) => c.kind === "real").map((c) => ({ id: c.id, name: c.name })) });
+  });
+
+  app.post("/api/treasury/entries", (req, res) => {
+    const b = req.body as { date?: string; companyId?: number | null; kind?: string; amount?: number; source?: string; note?: string };
+    const amount = Number(b.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: "Amount must be a positive number." });
+    const at = b.date ? Date.parse(b.date) : Date.now();
+    if (Number.isNaN(at)) return res.status(400).json({ message: "Invalid date." });
+    res.json(addLedgerEntry({
+      at, companyId: typeof b.companyId === "number" ? b.companyId : null, kind: b.kind === "expense" ? "expense" : "income",
+      amountCents: Math.round(amount * 100), source: String(b.source ?? "manual"), note: String(b.note ?? ""), status: "confirmed", createdBy: "owner",
+    }));
+  });
+
+  app.patch("/api/treasury/entries/:id", (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    const status = req.body?.status;
+    if (status !== "confirmed" && status !== "rejected") return res.status(400).json({ message: "status must be confirmed or rejected" });
+    setLedgerStatus(id, status);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/treasury/entries/:id", (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    deleteLedgerEntry(id);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/treasury/import", (req, res) => {
+    const b = req.body as { csv?: string; companyId?: number | null; source?: string };
+    if (!b.csv) return res.status(400).json({ message: "No CSV content." });
+    try {
+      res.json(importLedgerCsv(String(b.csv), typeof b.companyId === "number" ? b.companyId : null, String(b.source ?? "import")));
+    } catch (err) {
+      res.status(400).json({ message: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ---- Store catalog (AURORA Goods) ----
+  app.get("/api/store/products", (_req, res) => {
+    res.json(listProducts());
+  });
+
+  app.patch("/api/store/products/:id", (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    const b = req.body as { buyUrl?: string; status?: "draft" | "ready" | "listed"; price?: number; name?: string; description?: string };
+    if (b.buyUrl && !/^https?:\/\//i.test(b.buyUrl)) return res.status(400).json({ message: "Buy link must start with http(s)://" });
+    updateProduct(id, { buyUrl: b.buyUrl, status: b.status, priceCents: b.price !== undefined ? Math.round(Number(b.price) * 100) : undefined, name: b.name, description: b.description });
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/store/products/:id", (req, res) => {
+    const id = parseId(req, res);
+    if (id === null) return;
+    deleteProduct(id);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/store/shopify.csv", (_req, res) => {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="aurora-goods-shopify.csv"');
+    res.send(shopifyCsv());
+  });
+
+  app.post("/api/store/export-site", async (_req, res) => {
+    const dir = exportStoreSite();
+    const electron = await getElectronApis();
+    if (electron) electron.shell.openPath(dir).catch(() => {});
+    res.json({ dir });
   });
 
   // ---- Town: companies (real + simulated), residents, news ----

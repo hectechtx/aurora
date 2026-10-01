@@ -21,6 +21,8 @@ import GodsEye from "@/pages/GodsEye";
 import Agents from "@/pages/Agents";
 import Team from "@/pages/Team";
 import Pipelines from "@/pages/Pipelines";
+import Treasury from "@/pages/Treasury";
+import Store from "@/pages/Store";
 import Outbox from "@/pages/Outbox";
 import Skills from "@/pages/Skills";
 import Approvals from "@/pages/Approvals";
@@ -43,6 +45,8 @@ export default function App() {
                       <Route path="/" component={Home} />
                       <Route path="/team" component={Team} />
                       <Route path="/pipelines" component={Pipelines} />
+                      <Route path="/treasury" component={Treasury} />
+                      <Route path="/store" component={Store} />
                       <Route path="/agents" component={Agents} />
                       <Route path="/generate" component={Generate} />
                       <Route path="/tasks" component={Tasks} />

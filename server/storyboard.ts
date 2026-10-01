@@ -43,6 +43,10 @@ export interface GenerateStoryboardOptions {
   ollamaHost: string;
   ollamaModel: string;
   imageGenHost: string;
+  /** A finished script to produce instead of writing one from `topic` — its wording is kept as the narration. */
+  script?: string;
+  /** Burn captions (the narration, a few words at a time) into the video — what shorts/kids content expects. */
+  captions?: boolean;
 }
 
 export interface StoryboardResult {
@@ -60,9 +64,17 @@ function extractJson(text: string): string {
   return fenced ? fenced[1].trim() : text.trim();
 }
 
-async function planScenes(host: string, model: string, topic: string, targetMinutes: number, mode: "images" | "video" | "hybrid"): Promise<Scene[]> {
+async function planScenes(host: string, model: string, topic: string, targetMinutes: number, mode: "images" | "video" | "hybrid", script?: string): Promise<Scene[]> {
   const targetWords = Math.max(60, Math.round(targetMinutes * WORDS_PER_MINUTE));
   const sceneCount = Math.max(6, Math.min(60, Math.round((targetMinutes * 60) / 7)));
+  if (script?.trim()) {
+    // Produce an existing script (e.g. from the studio's scriptwriter)
+    // rather than writing a new one — keep its words, just split it into
+    // scenes and add visuals.
+    topic =
+      "Adapt this finished script into narrated scenes. Keep its spoken words as the narration (drop stage directions, " +
+      "timestamps and speaker labels), in order, and write a visualPrompt for each scene. The script:\n\n" + script.trim().slice(0, 12_000);
+  }
   const typeInstruction =
     mode === "images" ? 'Set "type" to "image" for every scene.'
     : mode === "video" ? 'Set "type" to "video" for every scene.'
@@ -84,7 +96,9 @@ async function planScenes(host: string, model: string, topic: string, targetMinu
     { role: "system", content: systemPrompt },
     { role: "user", content: topic },
   ];
-  const result = await chat(host, model, messages, []);
+  // Thinking off + Ollama's JSON mode: a thinking model otherwise tends to put
+  // the script inside its reasoning and return no parseable JSON at all.
+  const result = await chat(host, model, messages, [], 8192, { think: false, format: "json" });
   const jsonText = extractJson(result.message.content ?? "");
   let parsed: unknown;
   try {
@@ -122,11 +136,35 @@ function wavDurationSeconds(buf: Buffer): number {
   return bytesPerSecond > 0 ? dataSize / bytesPerSecond : 0;
 }
 
-function runFfmpeg(args: string[], timeoutMs = 180_000): Promise<void> {
+function srtTime(s: number): string {
+  const ms = Math.round(s * 1000);
+  const h = Math.floor(ms / 3_600_000), m = Math.floor((ms % 3_600_000) / 60_000), sec = Math.floor((ms % 60_000) / 1000);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")},${String(ms % 1000).padStart(3, "0")}`;
+}
+
+/** Narration split into ~6-word captions, spread evenly across each scene's span. */
+function captionsSrt(scenes: { start: number; duration: number; narration: string }[]): string {
+  const cues: string[] = [];
+  let n = 1;
+  for (const sc of scenes) {
+    const words = sc.narration.split(/\s+/).filter(Boolean);
+    const chunks: string[] = [];
+    for (let i = 0; i < words.length; i += 6) chunks.push(words.slice(i, i + 6).join(" "));
+    const speak = Math.max(0.5, sc.duration - 0.6); // the scene's trailing 0.6s pad is silence
+    chunks.forEach((text, i) => {
+      const a = sc.start + (speak / chunks.length) * i;
+      const b = sc.start + (speak / chunks.length) * (i + 1);
+      cues.push(`${n++}\n${srtTime(a)} --> ${srtTime(b)}\n${text}\n`);
+    });
+  }
+  return cues.join("\n");
+}
+
+export function runFfmpeg(args: string[], timeoutMs = 180_000, cwd?: string): Promise<void> {
   const ffmpeg = getFfmpegPath();
   if (!ffmpeg) return Promise.reject(new StoryboardError("ffmpeg wasn't found — set up video generation in Settings first (it bundles ffmpeg)."));
   return new Promise((resolve, reject) => {
-    execFile(ffmpeg, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 * 20, windowsHide: true }, (err, _stdout, stderr) => {
+    execFile(ffmpeg, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 * 20, windowsHide: true, cwd }, (err, _stdout, stderr) => {
       if (err) return reject(new StoryboardError(`ffmpeg failed: ${stderr.slice(-1500) || err.message}`));
       resolve();
     });
@@ -254,7 +292,7 @@ export async function generateStoryboard(opts: GenerateStoryboardOptions, hooks:
   }
 
   onProgress?.("Writing the script…");
-  const scenes = await planScenes(opts.ollamaHost, opts.ollamaModel, opts.topic, opts.targetMinutes, opts.mode);
+  const scenes = await planScenes(opts.ollamaHost, opts.ollamaModel, opts.topic, opts.targetMinutes, opts.mode, opts.script);
 
   const workDir = path.join(os.tmpdir(), `storyboard-${randomUUID()}`);
   fs.mkdirSync(workDir, { recursive: true });
@@ -264,12 +302,14 @@ export async function generateStoryboard(opts: GenerateStoryboardOptions, hooks:
 
   try {
     const segments: string[] = [];
+    const sceneTimes: { start: number; duration: number; narration: string }[] = [];
     let actualSeconds = 0;
     for (let i = 0; i < scenes.length; i++) {
       if (shouldStop?.()) throw new StoryboardError("Stopped by owner.");
       onProgress?.(`Rendering scene ${i + 1} of ${scenes.length}…`);
       const { segmentPath, duration } = await renderScene(scenes[i], i, workDir, opts, width, height, clipWidth, clipHeight);
       segments.push(segmentPath);
+      sceneTimes.push({ start: actualSeconds, duration, narration: scenes[i].narration });
       actualSeconds += duration;
     }
 
@@ -290,6 +330,20 @@ export async function generateStoryboard(opts: GenerateStoryboardOptions, hooks:
       ], 300_000);
     } else {
       fs.copyFileSync(concatPath, outPath);
+    }
+
+    if (opts.captions) {
+      onProgress?.("Burning in captions…");
+      fs.writeFileSync(path.join(workDir, "captions.srt"), captionsSrt(sceneTimes));
+      const captioned = path.join(workDir, "captioned.mp4");
+      await runFfmpeg([
+        "-y", "-i", outPath,
+        // Relative subtitle path + cwd=workDir sidesteps the subtitles
+        // filter's painful escaping of Windows drive-letter paths.
+        "-vf", `subtitles=captions.srt:force_style='FontName=Arial,FontSize=${opts.orientation === "portrait" ? 13 : 18},Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Shadow=0,Alignment=2,MarginV=${opts.orientation === "portrait" ? 70 : 30}'`,
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "copy", captioned,
+      ], 600_000, workDir);
+      return { buffer: fs.readFileSync(captioned), sceneCount: scenes.length, actualSeconds };
     }
 
     return { buffer: fs.readFileSync(outPath), sceneCount: scenes.length, actualSeconds };

@@ -21,6 +21,9 @@ import { webSearch, webFetch, fetchImageBytes } from "./web-tools";
 import { browseInteract, BrowserToolError, READ_ONLY_ACTIONS, type BrowseAction } from "./browser-tool";
 import { trendingVideos, youtubeSearch, videoTranscript, newsHeadlines, saveDocument, makeVoiceover, VOICE_IDS } from "./content-tools";
 import { getCompanies } from "./companies";
+import { timestampedTranscript, makeClip } from "./clips";
+import { addLedgerEntry, treasurySummary, addProduct, listProducts, newImageName } from "./commerce";
+import { generateStoryboard } from "./storyboard";
 import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
 import { getCreationsDir, SELF_SOURCE_DIR } from "./paths";
@@ -238,8 +241,90 @@ function builtinTools(): ToolDef[] {
     },
     {
       name: "video_transcript", kind: "builtin", risk: "low",
-      description: "Get the spoken words (captions) of a YouTube video so you can summarize or analyze it without watching it.",
-      parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
+      description: "Get the spoken words (captions) of a YouTube video so you can summarize or analyze it without watching it. Set timestamps=true to get '[m:ss] text' lines for picking clip moments.",
+      parameters: { type: "object", properties: { url: { type: "string" }, timestamps: { type: "boolean" } }, required: ["url"] },
+    },
+    {
+      name: "produce_video", kind: "builtin", risk: "low",
+      description:
+        "Produce a complete, finished narrated video and save it to the Library: scene visuals (AI images with camera motion, optional short AI clips), " +
+        "natural voiceover, optional burned-in captions and background music, rendered to MP4. Pass a finished script to produce it as written, or just a topic. " +
+        "Takes several minutes (longer for long videos). Returns the Library id — attach it to a deliverable with save_deliverable mediaId.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          script: { type: "string", description: "Finished script to produce (its words become the narration)" },
+          topic: { type: "string", description: "Used when there's no script" },
+          minutes: { type: "number", description: "Target length, 0.5-10 (default 2)" },
+          orientation: { type: "string", enum: ["landscape", "portrait"], description: "landscape for YouTube, portrait for Shorts/TikTok/Reels" },
+          captions: { type: "boolean", description: "Burn captions in (default true)" },
+          voice: { type: "string", enum: VOICE_IDS },
+        },
+        required: ["title"],
+      },
+    },
+    {
+      name: "make_clip", kind: "builtin", risk: "low",
+      description:
+        "Cut a short clip (max 3 min) from a YouTube URL or a Library video: reframed vertical 9:16 for Shorts/TikTok/Reels with burned-in captions, saved to the Library. " +
+        "Use video_transcript with timestamps=true first to find the best moment. ONLY clip the studio's own videos or creators who explicitly allow or pay for clips.",
+      parameters: {
+        type: "object",
+        properties: {
+          source: { type: "string", description: "YouTube URL, or a Library filename" },
+          start: { type: "string", description: "Start time, e.g. '1:23' or seconds" },
+          end: { type: "string", description: "End time" },
+          vertical: { type: "boolean", description: "Reframe to 9:16 (default true)" },
+          captions: { type: "boolean", description: "Burn in captions (default true)" },
+        },
+        required: ["source", "start", "end"],
+      },
+    },
+    {
+      name: "add_store_product", kind: "builtin", risk: "low",
+      description: "Add a product to AURORA Goods' catalog: name, description, price, category and tags, with an AI-generated product image from image_prompt. It becomes 'ready' for the owner to list on the live store.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" }, description: { type: "string" }, price: { type: "number", description: "USD" },
+          category: { type: "string" }, tags: { type: "array", items: { type: "string" } },
+          image_prompt: { type: "string", description: "What the product image should show (e.g. a t-shirt mockup with the design)" },
+        },
+        required: ["name", "description", "price"],
+      },
+    },
+    {
+      name: "list_library", kind: "builtin", risk: "low",
+      description: "List recent items in the Library (finished videos, clips, images, audio) with their id, filename and title — e.g. to find the studio's newest videos to clip.",
+      parameters: { type: "object", properties: { kind: { type: "string", enum: ["video", "image", "audio", "any"] }, limit: { type: "number" } } },
+    },
+    {
+      name: "list_outbox", kind: "builtin", risk: "low",
+      description: "List recent Outbox deliverables (titles, who made them, when, and the start of the content) — e.g. to review the week's output.",
+      parameters: { type: "object", properties: { limit: { type: "number" } } },
+    },
+    {
+      name: "list_store_products", kind: "builtin", risk: "low",
+      description: "List the store catalog: products, prices, status (draft/ready/listed) and whether they have a buy link yet.",
+      parameters: { type: "object", properties: {} },
+    },
+    {
+      name: "record_transaction", kind: "builtin", risk: "low",
+      description: "Propose a real income or expense entry for the Treasury ledger (e.g. a sale, ad revenue, a cost). It stays 'proposed' until the owner confirms it — never record anything that didn't actually happen.",
+      parameters: {
+        type: "object",
+        properties: {
+          company: { type: "string" }, kind: { type: "string", enum: ["income", "expense"] }, amount: { type: "number", description: "USD" },
+          source: { type: "string", description: "Where it came from, e.g. Shopify, YouTube AdSense, Etsy" }, note: { type: "string" },
+        },
+        required: ["kind", "amount", "source"],
+      },
+    },
+    {
+      name: "treasury_summary", kind: "builtin", risk: "low",
+      description: "What the organization has ACTUALLY earned and spent (owner-confirmed entries only): totals, per company, per month, plus how many entries await confirmation.",
+      parameters: { type: "object", properties: {} },
     },
     {
       name: "news_headlines", kind: "builtin", risk: "low",
@@ -389,6 +474,7 @@ function builtinTools(): ToolDef[] {
           tags: { type: "array", items: { type: "string" } },
           body: { type: "string" },
           thumbnailPrompt: { type: "string" },
+          mediaId: { type: "number", description: "Library creation id of a finished video/clip/image to attach (from produce_video, make_clip, generate_image)" },
         },
         required: ["title", "body"],
       },
@@ -1206,7 +1292,11 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
         const thumbnailPrompt = args.thumbnailPrompt ? String(args.thumbnailPrompt) : undefined;
 
         let creationId: number | null = null;
-        if (thumbnailPrompt && config.imageGenHost) {
+        // A finished video/clip/image from the Library takes the media slot —
+        // that's how produced videos and clips reach the posting queue.
+        const mediaId = Number(args.mediaId);
+        if (Number.isInteger(mediaId) && mediaId > 0 && await storage.getCreation(mediaId)) creationId = mediaId;
+        if (creationId == null && thumbnailPrompt && config.imageGenHost) {
           try {
             const { pngBuffer } = await generateImage(config.imageGenHost, thumbnailPrompt, config.ollamaHost);
             const filename = `${randomUUID()}.png`;
@@ -1253,8 +1343,95 @@ async function executeTool(tool: ToolDef, args: Record<string, unknown>, ctx: Ru
         return { ok: true, output: vids.map((v, i) => `${i + 1}. ${v.title} — ${v.channel} (${v.views}, ${v.length}, ${v.published}) ${v.url}`).join("\n") };
       }
       case "video_transcript": {
+        if (args.timestamps === true) return { ok: true, output: await timestampedTranscript(String(args.url ?? "")) };
         const t = await videoTranscript(String(args.url ?? ""));
         return { ok: true, output: `${t.title}\n\n${t.text}` };
+      }
+      case "produce_video": {
+        const title = String(args.title ?? "Untitled video").slice(0, 200);
+        const script = args.script ? String(args.script) : undefined;
+        const topic = String(args.topic ?? title);
+        if (!config.imageGenHost) return { ok: false, output: "image generation isn't set up (Settings), and video production needs it for scene visuals" };
+        const minutes = Math.max(0.5, Math.min(10, Number(args.minutes) || 2));
+        const voice = VOICE_IDS.includes(String(args.voice)) ? String(args.voice) : "af_heart";
+        const result = await generateStoryboard({
+          topic, script, targetMinutes: minutes, mode: "images",
+          orientation: args.orientation === "portrait" ? "portrait" : "landscape", voiceId: voice,
+          ollamaHost: config.ollamaHost, ollamaModel: config.model, imageGenHost: config.imageGenHost, captions: args.captions !== false,
+        }, { shouldStop: () => stopWasRequested(ctx) });
+        const filename = `${randomUUID()}.mp4`;
+        fs.writeFileSync(path.join(getCreationsDir(), filename), result.buffer);
+        const creation = await storage.createCreation({
+          taskId: ctx.type === "task" ? ctx.taskId : undefined, agentId: memoryAgentId ?? undefined,
+          kind: "video", prompt: (script ?? topic).slice(0, 500), filePath: filename, title,
+        });
+        return { ok: true, output: `Produced "${title}": ${result.sceneCount} scenes, ~${Math.round(result.actualSeconds)}s. Saved to the Library as #${creation.id} (use mediaId ${creation.id} with save_deliverable).` };
+      }
+      case "make_clip": {
+        const clip = await makeClip({
+          source: String(args.source ?? ""), start: String(args.start ?? ""), end: String(args.end ?? ""),
+          vertical: args.vertical !== false, captions: args.captions !== false,
+        });
+        const creation = await storage.createCreation({
+          taskId: ctx.type === "task" ? ctx.taskId : undefined, agentId: memoryAgentId ?? undefined,
+          kind: "video", prompt: `clip of ${String(args.source).slice(0, 200)} ${args.start}-${args.end}`, filePath: clip.filename, title: `Clip ${args.start}–${args.end}`,
+        });
+        return { ok: true, output: `Clip saved to the Library as #${creation.id} (${Math.round(clip.seconds)}s, ${args.vertical === false ? "original framing" : "vertical 9:16"}). Use mediaId ${creation.id} with save_deliverable.` };
+      }
+      case "add_store_product": {
+        let imagePath: string | null = null;
+        if (args.image_prompt && config.imageGenHost) {
+          try {
+            const { pngBuffer } = await generateImage(config.imageGenHost, String(args.image_prompt), config.ollamaHost);
+            imagePath = newImageName();
+            fs.writeFileSync(path.join(getCreationsDir(), imagePath), pngBuffer);
+          } catch { /* product without an image is still useful */ }
+        }
+        const who = memoryAgentId ? (await storage.getAgent(memoryAgentId))?.name.trim() ?? "agent" : "AURORA";
+        const p = addProduct({
+          name: String(args.name ?? ""), description: String(args.description ?? ""), priceCents: Math.round((Number(args.price) || 0) * 100),
+          category: String(args.category ?? ""), tags: Array.isArray(args.tags) ? args.tags.map(String) : [], imagePath, createdBy: who,
+        });
+        return { ok: true, output: `Added "${p.name}" ($${(p.priceCents / 100).toFixed(2)}) to the catalog as product #${p.id}${imagePath ? " with a product image" : ""}. The owner lists it on the live store.` };
+      }
+      case "list_library": {
+        const kind = String(args.kind ?? "any");
+        const items = (await storage.getCreations(200))
+          .filter((c) => !c.deletedAt && (kind === "any" || c.kind === kind))
+          .slice(0, Math.min(Math.max(Number(args.limit) || 15, 1), 50));
+        if (items.length === 0) return { ok: true, output: "nothing in the Library yet" };
+        return { ok: true, output: items.map((c) => `#${c.id} [${c.kind}] ${c.title ?? c.prompt.slice(0, 80)} — file ${c.filePath} (${new Date(c.createdAt).toLocaleDateString()})`).join("\n") };
+      }
+      case "list_outbox": {
+        const [items, agentsAll] = await Promise.all([storage.getDeliverables(), storage.getAgents()]);
+        const names = new Map(agentsAll.map((a) => [a.id, a.name.trim()] as const));
+        const recent = items.slice(0, Math.min(Math.max(Number(args.limit) || 15, 1), 50));
+        if (recent.length === 0) return { ok: true, output: "the Outbox is empty" };
+        return { ok: true, output: recent.map((d) => `#${d.id} "${d.title}" by ${names.get(d.agentId) ?? "?"} (${new Date(d.createdAt).toLocaleDateString()}): ${d.body.replace(/\s+/g, " ").slice(0, 160)}`).join("\n") };
+      }
+      case "list_store_products": {
+        const all = listProducts();
+        if (all.length === 0) return { ok: true, output: "the catalog is empty" };
+        return { ok: true, output: all.map((p) => `#${p.id} ${p.name} — $${(p.priceCents / 100).toFixed(2)} [${p.status}${p.buyUrl ? ", has buy link" : ""}] ${p.category}`).join("\n") };
+      }
+      case "record_transaction": {
+        const amount = Number(args.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return { ok: false, output: "amount must be a positive number of USD" };
+        const company = args.company ? getCompanies().find((c) => c.name.toLowerCase() === String(args.company).toLowerCase()) : undefined;
+        const who = memoryAgentId ? (await storage.getAgent(memoryAgentId))?.name.trim() ?? "agent" : "AURORA";
+        const e = addLedgerEntry({
+          companyId: company?.id ?? null, kind: args.kind === "expense" ? "expense" : "income", amountCents: Math.round(amount * 100),
+          source: String(args.source ?? ""), note: String(args.note ?? ""), status: "proposed", createdBy: who,
+        });
+        return { ok: true, output: `Proposed ledger entry #${e.id} (${e.kind} $${amount.toFixed(2)}) — it counts once the owner confirms it in the Treasury.` };
+      }
+      case "treasury_summary": {
+        const s = treasurySummary();
+        const names = new Map(getCompanies().map((c) => [c.id, c.name] as const));
+        const $ = (c: number) => `$${(c / 100).toFixed(2)}`;
+        return { ok: true, output:
+          `Confirmed totals: income ${$(s.incomeCents)}, expenses ${$(s.expenseCents)}, net ${$(s.netCents)}. ${s.proposedCount} entr${s.proposedCount === 1 ? "y" : "ies"} awaiting owner confirmation.\n` +
+          (s.byCompany.length ? s.byCompany.map((b) => `- ${b.companyId ? names.get(b.companyId) ?? "?" : "HQ/unassigned"}: +${$(b.incomeCents)} / -${$(b.expenseCents)}`).join("\n") : "No confirmed transactions yet.") };
       }
       case "news_headlines": {
         const items = await newsHeadlines(args.topic ? String(args.topic) : undefined, Number(args.limit) || 10);

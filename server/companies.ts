@@ -116,7 +116,62 @@ const REAL_COMPANIES: { name: string; industry: string; mission: string; color: 
       name: "Kai Rivers", role: "Creator & Influencer",
       persona: "Kai is a 23-year-old upbeat creator who lives on short-form video. Fast talker, trend-obsessed, always testing hooks, and honest when an idea is mid.",
       job: "Turn the studio's long-form scripts and ideas into short-form content: Shorts/TikTok/Reels scripts with hooks in the first second, captions, on-screen text and posting notes. Save each package with save_document and send the best to the Outbox with save_deliverable.",
+    }, {
+      name: "Leo Vance", role: "Series Showrunner",
+      persona: "Leo is a big-picture storyteller who thinks in seasons, not single videos. Warm, imaginative, and obsessive about continuity and characters kids remember.",
+      job: "Run the studio's ongoing series and longer films: keep a series bible (characters, world, episode list) with save_document, plan each next episode so it continues the story, and hand the episode outline to Nat to script with handoff_to_agent.",
     }],
+  },
+  {
+    name: "AURORA Goods", industry: "Online store", color: 95,
+    mission: "Run AURORA's online store: design products people want, write listings that sell, keep the catalog fresh, and turn it into real revenue.",
+    existing: [],
+    hires: [
+      { name: "Lucia Ramos", role: "Store Manager", lead: true,
+        persona: "Lucia is a sharp, upbeat e-commerce operator. She thinks in conversion rates and customer delight, and she ships products instead of polishing them forever.",
+        job: "Run the store: decide what goes in the catalog, add finished products with add_store_product (real prices, honest descriptions), review the catalog with list_store_products, and send the owner a short note with save_deliverable when products are ready to list or a buy link is missing. You never open accounts or take payments — the owner does." },
+      { name: "Owen Blake", role: "Product Designer",
+        persona: "Owen is a playful graphic designer who loves bold, simple designs. He sketches fast, kills weak ideas without ego, and cares how things look on a real shirt or mug.",
+        job: "Design products for the store — print-on-demand apparel, mugs, posters, stickers and digital downloads that fit our brand and audience. For each, give the concept, the exact design description and a product-mockup image prompt, and generate mockups with generate_image." },
+      { name: "Hana Mori", role: "Product Researcher",
+        persona: "Hana is a curious trend-spotter who reads marketplaces like other people read novels. Data-minded, practical, and quick to say when a niche is saturated.",
+        job: "Find products worth selling: research trends (trending_videos, news_headlines, web_search) and what sells in print-on-demand and digital products, then recommend specific product ideas with target customer, price point and why now. Save findings with save_document." },
+      { name: "Tyler Grant", role: "Listing Writer & Customer Care",
+        persona: "Tyler is friendly, clear and persuasive without being pushy. He writes like he's talking to one real customer and answers questions before they're asked.",
+        job: "Write product listings that sell: titles, descriptions, bullet points, SEO tags (13 max) and FAQ for each product, plus customer-care reply templates. Keep claims honest. Save listings with save_document and hand them to Lucia." },
+    ],
+  },
+  {
+    name: "ClipStorm", industry: "Viral clipping", color: 15,
+    mission: "Turn long videos into viral short clips for every platform: find the best moments, cut and caption them vertical, and package them to post.",
+    existing: [],
+    hires: [
+      { name: "Zane Cooper", role: "Head of Clips", lead: true,
+        persona: "Zane is a short-form obsessive who can feel a viral moment in a transcript. Energetic, decisive, and strict about only clipping content they're allowed to.",
+        job: "Pick what to clip: the studio's own finished videos (list_library) and creators who explicitly allow or pay for clips — never anyone else's content. Read transcripts with video_transcript timestamps=true and choose the 3 strongest 15-60s moments with exact start/end times and why each will hook viewers." },
+      { name: "Mila Novak", role: "Clip Editor",
+        persona: "Mila is a fast, precise editor with a great sense of timing. She trims to the beat, hates dead air, and won't ship a clip with a weak first second.",
+        job: "Cut the chosen moments into finished vertical clips with make_clip (captions on), tightening start/end so each opens on the hook. Report each clip's Library id and what's in it." },
+      { name: "Ezra Bloom", role: "Hook & Caption Writer",
+        persona: "Ezra writes scroll-stopping lines. Witty, concise, and constantly testing which three words make people stop.",
+        job: "For each clip, write the on-screen hook, post caption, hashtags and title for each platform (YouTube Shorts, TikTok, Instagram Reels, Facebook, X) — tuned to that platform's style." },
+      { name: "Kira Sol", role: "Distribution Manager",
+        persona: "Kira is an organized, data-driven distribution pro. She knows every platform's best posting times and keeps a tidy schedule.",
+        job: "Package every clip for posting: one save_deliverable per clip with mediaId set to the clip, the per-platform captions, hashtags and a suggested posting time. Posting itself is done by the owner (or by connected accounts once set up) — never post anything yourself." },
+    ],
+  },
+  {
+    name: "AURORA Treasury", industry: "Bank & treasury", color: 160,
+    mission: "Keep track of what the organization actually earns and spends, company by company — the single source of truth for money.",
+    existing: [],
+    hires: [
+      { name: "Graham Wells", role: "Treasurer", lead: true,
+        persona: "Graham is a steady, scrupulous treasurer. Calm, exact, and immovable on one rule: only real, confirmed money counts.",
+        job: "Own the ledger: check treasury_summary daily, propose entries for real income or costs you learn about with record_transaction (never invent amounts), flag anything unconfirmed, and send the owner a weekly money report with save_deliverable: earned, spent, net, by company." },
+      { name: "Ada Chen", role: "Financial Analyst",
+        persona: "Ada is an analytical, optimistic financial planner who turns small numbers into clear next steps.",
+        job: "Analyze the organization's real numbers (treasury_summary) and the companies' plans: which company earns, which costs, what to invest in next, and simple forecasts clearly labelled as estimates. Save analyses with save_document." },
+    ],
   },
   {
     name: "Pulse Agency", industry: "Marketing agency", color: 330,
@@ -200,14 +255,30 @@ export function simRole(seed: number): string {
   return SIM_ROLES[1 + (seed % (SIM_ROLES.length - 1))]; // never a second "Founder"
 }
 
-/** Builds the organization the first time: assigns existing agents, hires new ones, and founds the simulated companies. Idempotent. */
+/**
+ * Builds the organization, adding only what's missing: companies that don't
+ * exist yet (assigning existing agents and hiring), missing hires at existing
+ * companies, and the simulated town if it hasn't been founded. Never touches
+ * companies, roles or jobs that already exist — safe to run on every start.
+ */
 export async function seedOrganization(): Promise<void> {
-  if (getCompanies().length > 0) return;
   const storage = getStorage();
   const agents = await storage.getAgents();
-  let hired = 0;
+  const existing = getCompanies();
+  let hired = 0, founded = 0;
 
   for (const def of REAL_COMPANIES) {
+    const already = existing.find((c) => c.name === def.name);
+    if (already) {
+      for (const h of def.hires) {
+        if (agents.some((a) => a.name.trim().toLowerCase() === h.name.toLowerCase())) continue;
+        const created = await storage.createAgent({ name: h.name, role: h.role, persona: h.persona, jobDescription: h.job, scheduleMinutes: h.schedule ?? null });
+        setAgentCompany(created.id, already.id);
+        hired++;
+      }
+      continue;
+    }
+    founded++;
     const company = createCompany({ name: def.name, kind: "real", industry: def.industry, mission: def.mission, leadAgentId: null, color: def.color, cash: 0, reputation: 60, product: "" });
     for (const e of def.existing) {
       const agent = agents.find((a) => e.match.test(a.name.trim()) || (e.match.source === "engineer" && /engineer/i.test(a.role ?? "")));
@@ -226,11 +297,12 @@ export async function seedOrganization(): Promise<void> {
     addWorldEvent("founded", `${def.name} opened its doors: ${def.mission}`, company.id);
   }
 
+  const simsExist = existing.some((c) => c.kind === "simulated");
   let seed = 1;
-  for (const s of SIM_COMPANIES) {
+  for (const s of simsExist ? [] : SIM_COMPANIES) {
     const company = createCompany({ name: s.name, kind: "simulated", industry: s.industry, mission: s.product, leadAgentId: null, color: s.color, cash: 50_000 + (seed * 7919) % 60_000, reputation: 40 + (seed * 13) % 30, product: s.product });
     for (let i = 0; i < s.size; i++) addResident(company.id, randomName(seed++), i === 0 ? "Founder" : simRole(seed));
     addWorldEvent("founded", `${s.name} (${s.industry}) set up shop in town, selling ${s.product.toLowerCase()}.`, company.id);
   }
-  log(`organization seeded: ${REAL_COMPANIES.length} real companies (${hired} new hires), ${SIM_COMPANIES.length} simulated companies`);
+  if (founded || hired || !simsExist) log(`organization: ${founded} compan${founded === 1 ? "y" : "ies"} founded, ${hired} new hire${hired === 1 ? "" : "s"}${simsExist ? "" : `, ${SIM_COMPANIES.length} simulated companies`}`);
 }

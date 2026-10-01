@@ -13,6 +13,7 @@ import type { Agent } from "@shared/schema";
 export interface Chatter { agentIds: [number, number]; lines: { agentId: number; text: string }[]; at: number }
 
 const ENCOUNTER_EVERY_MS = 10 * 60_000;
+const CHATTER_MODEL = "qwen3.5:4b";
 const MAX_CHATTER = 20;
 const recent: Chatter[] = [];
 let lastEncounterAt = 0;
@@ -43,10 +44,12 @@ export async function worldTick(busyAgentIds: Set<number>, urgentWaiting: boolea
   lastEncounterAt = Date.now();
   encounterRunning = true;
   try {
-    const i = Math.floor(Math.random() * idle.length);
-    let j = Math.floor(Math.random() * (idle.length - 1));
-    if (j >= i) j++;
-    await encounter(idle[i], idle[j]);
+    const first = idle[Math.floor(Math.random() * idle.length)];
+    // Mostly colleagues from the same company bump into each other, with the
+    // occasional cross-company encounter.
+    const sameCompany = idle.filter((a) => a !== first && a.companyId != null && a.companyId === first.companyId);
+    const pool = sameCompany.length && Math.random() < 0.7 ? sameCompany : idle.filter((a) => a !== first);
+    await encounter(first, pool[Math.floor(Math.random() * pool.length)]);
   } catch (err) {
     await storage.log("world encounter failed", err instanceof Error ? err.message : String(err), "error").catch(() => {});
   } finally {
@@ -72,7 +75,10 @@ async function encounter(a: Agent, b: Agent): Promise<void> {
     (lastA ? `${a.name.trim()} was recently working on: ${lastA.content.replace(/\s+/g, " ").slice(0, 200)}\n` : "") +
     `Write their short, natural exchange — 2 to 4 lines total, alternating, in character, about work or how they're doing. ` +
     `Format each line exactly as "A: ..." or "B: ...". No narration, no stage directions.`;
-  const res = await chat(config.ollamaHost, config.model, [{ role: "user", content: prompt }], [], 2048, { think: false });
+  // Small talk goes to the light model so it doesn't evict/compete with the
+  // 9B model doing real work; falls back to the main model if it's missing.
+  const res = await chat(config.ollamaHost, CHATTER_MODEL, [{ role: "user", content: prompt }], [], 2048, { think: false })
+    .catch(() => chat(config.ollamaHost, config.model, [{ role: "user", content: prompt }], [], 2048, { think: false }));
   const lines = (res.message.content ?? "")
     .split(/\r?\n/)
     .map((l) => l.trim().match(/^\**\s*(A|B)\s*\**\s*:\s*(.+)$/i))

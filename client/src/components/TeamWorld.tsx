@@ -51,8 +51,8 @@ function pct(v: number, total: number): string {
   return `${(v / total) * 100}%`;
 }
 
-export function TeamWorld({ members, handoffs, flows, chatter = [], selectedId, onSelect }: {
-  members: WorldMember[]; handoffs: Handoff[]; flows: PipelineFlow[]; chatter?: Chatter[]; selectedId: number | null; onSelect: (id: number) => void;
+export function TeamWorld({ members, handoffs, flows, chatter = [], leadId = null, selectedId, onSelect }: {
+  members: WorldMember[]; handoffs: Handoff[]; flows: PipelineFlow[]; chatter?: Chatter[]; leadId?: number | null; selectedId: number | null; onSelect: (id: number) => void;
 }) {
   // A slow "beat" re-rolls idle agents' wander spots so the lounge feels alive.
   const [beat, setBeat] = useState(0);
@@ -61,7 +61,8 @@ export function TeamWorld({ members, handoffs, flows, chatter = [], selectedId, 
     return () => clearInterval(t);
   }, []);
 
-  const lead = members.find((m) => m.isOverseer) ?? null;
+  // The lead office belongs to AURORA, or — inside one company's office — that company's lead.
+  const lead = members.find((m) => m.isOverseer) ?? members.find((m) => m.id === leadId) ?? null;
   const crew = members.filter((m) => m !== lead);
   const desks = useMemo(() => deskSpots(crew.length), [crew.length]);
   const deskOf = useMemo(() => {
@@ -90,7 +91,7 @@ export function TeamWorld({ members, handoffs, flows, chatter = [], selectedId, 
   // Off-desk agents each get their own slot (no pile-ups): paused ones doze in
   // the lounge, idle ones mingle across the meeting room and lounge, drifting
   // a little around their slot on each beat.
-  const offDesk = members.filter((m) => m.status === "paused" || (!m.working && !m.waitingApproval && !m.isOverseer && !visiting.has(m.id) && !chatting(m)));
+  const offDesk = members.filter((m) => m.status === "paused" || (!m.working && !m.waitingApproval && m !== lead && !visiting.has(m.id) && !chatting(m)));
   const sleepers = offDesk.filter((m) => m.status === "paused");
   const idlers = offDesk.filter((m) => m.status !== "paused");
   function slot(room: { x: number; y: number; w: number; h: number }, i: number, n: number): { x: number; y: number } {
@@ -108,7 +109,7 @@ export function TeamWorld({ members, handoffs, flows, chatter = [], selectedId, 
       const d = deskOf.get(target)!;
       return { x: d.x + 46, y: d.y + 10, mode: "visit" };
     }
-    if (m.working || m.waitingApproval || m.isOverseer) return { x: desk.x, y: desk.y + 26, mode: "desk" };
+    if (m.working || m.waitingApproval || m === lead) return { x: desk.x, y: desk.y + 26, mode: "desk" };
     const i = idlers.indexOf(m);
     const half = Math.ceil(idlers.length / 2);
     const base = i < half ? slot(ROOMS.meeting, i, half) : slot(ROOMS.lounge, i - half, idlers.length - half);
@@ -153,7 +154,7 @@ export function TeamWorld({ members, handoffs, flows, chatter = [], selectedId, 
         if (!d) return null;
         const busy = m.working || m.waitingApproval;
         return (
-          <div key={`desk-${m.id}`} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: pct(d.x, W), top: pct(d.y - 8, H), width: pct(m.isOverseer ? 120 : 96, W) }}>
+          <div key={`desk-${m.id}`} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: pct(d.x, W), top: pct(d.y - 8, H), width: pct(m === lead ? 120 : 96, W) }}>
             <div className="mx-auto h-2.5 w-[46%] rounded-t-sm" style={{
               background: busy ? (m.waitingApproval ? "hsl(var(--risk-medium))" : "hsl(var(--primary))") : "hsl(var(--muted))",
               boxShadow: busy ? `0 0 14px ${m.waitingApproval ? "hsl(var(--risk-medium))" : "hsl(var(--primary))"}` : undefined,
@@ -197,7 +198,7 @@ export function TeamWorld({ members, handoffs, flows, chatter = [], selectedId, 
           : p.mode === "visit" ? "Passing this over to you →"
           : m.working ? (m.lastTools[0] && TOOL_WORDS[m.lastTools[0]] ? `${TOOL_WORDS[m.lastTools[0]]}…` : (m.currentTask ? `On it: ${m.currentTask.replace(/^\[[^\]]*\]\s*/, "").slice(0, 70)}` : "Working…"))
           : null;
-        const size = m.isOverseer ? "h-12 w-12" : "h-10 w-10";
+        const size = m === lead ? "h-12 w-12" : "h-10 w-10";
         return (
           <button
             key={m.id}
@@ -218,7 +219,7 @@ export function TeamWorld({ members, handoffs, flows, chatter = [], selectedId, 
             <div
               className={cn("rounded-full p-[2px] transition-transform group-hover:scale-110", selectedId === m.id && "scale-110")}
               style={{
-                background: m.waitingApproval ? "hsl(var(--risk-medium))" : m.working ? "hsl(var(--primary))" : m.isOverseer ? "hsl(var(--accent))" : "hsl(var(--border))",
+                background: m.waitingApproval ? "hsl(var(--risk-medium))" : m.working ? "hsl(var(--primary))" : m === lead ? "hsl(var(--accent))" : "hsl(var(--border))",
                 animation: walking.has(m.id) ? "team-walk 0.36s ease-in-out infinite" : m.working ? "team-ring 1.6s ease-in-out infinite" : undefined,
               }}
             >

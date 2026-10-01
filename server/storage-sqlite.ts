@@ -150,6 +150,7 @@ for (const stmt of [
   "ALTER TABLE agent_queue_items ADD COLUMN pipeline_run_id INTEGER",
   "ALTER TABLE agent_queue_items ADD COLUMN stage_index INTEGER",
   "ALTER TABLE agent_queue_items ADD COLUMN origin_task_id INTEGER",
+  "ALTER TABLE agents ADD COLUMN company_id INTEGER",
   "CREATE TABLE IF NOT EXISTS pipelines (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', stages TEXT NOT NULL, schedule_minutes INTEGER, active INTEGER NOT NULL DEFAULT 1, last_run_at INTEGER, origin_task_id INTEGER, created_at INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS pipeline_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, pipeline_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'running', stage_index INTEGER NOT NULL DEFAULT 0, origin_task_id INTEGER, output TEXT, started_at INTEGER NOT NULL, finished_at INTEGER)",
 ]) {

@@ -9,6 +9,7 @@ import { startScheduler } from "./scheduler";
 import { startComfyUi } from "./comfyui";
 import { startTelegramBot } from "./telegram";
 import { repairSkillPaths } from "./skills/runner";
+import { seedOrganization } from "./companies";
 import { SKILLS_DIR } from "./paths";
 
 // Best-effort "open this URL in the default browser" — never throws.
@@ -53,6 +54,9 @@ export async function startServer(opts: StartServerOptions = {}): Promise<{ port
   if (repairedSkills) log(`skills: repointed ${repairedSkills} skill folder(s) to ${SKILLS_DIR}`);
   const app = await createApp(storage);
   const httpServer = createServer(app);
+  // First run of the companies layer: assign agents, hire the new roles, found
+  // the simulated companies. No-op once companies exist.
+  await seedOrganization().catch((err) => log(`organization seed failed: ${err instanceof Error ? err.message : String(err)}`));
   startScheduler();
   // Long-poll loop for the Telegram music remote. No-ops until a bot token
   // AND an owner id are set in Settings, and picks them up without a restart.

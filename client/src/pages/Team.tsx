@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { IdentityAvatar } from "@/components/ui/Avatar";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { TeamWorld, type Handoff, type PipelineFlow } from "@/components/TeamWorld";
+import { TeamWorld, type Handoff, type PipelineFlow, type Chatter } from "@/components/TeamWorld";
+import { TownMap, type TownData } from "@/components/TownMap";
 import { Play, Pause, X, ShieldAlert, Wrench } from "lucide-react";
 
 interface Member {
@@ -22,6 +23,7 @@ interface Member {
   lastRunAt: number | null;
   scheduleMinutes: number | null;
   spawnedByAgentId: number | null;
+  companyId: number | null;
   working: boolean;
   waitingApproval: boolean;
   currentTask: string | null;
@@ -31,7 +33,7 @@ interface Member {
   relationships: { otherAgentId: number; sentiment: number; interactions: number }[];
 }
 
-interface TeamData { members: Member[]; pendingApprovals: number; recentHandoffs: Handoff[]; pipelineFlows: PipelineFlow[] }
+interface TeamData { members: Member[]; pendingApprovals: number; recentHandoffs: Handoff[]; pipelineFlows: PipelineFlow[]; chatter: Chatter[] }
 
 type State = "working" | "approval" | "idle" | "paused";
 
@@ -118,7 +120,11 @@ export default function Team() {
   const qc = useQueryClient();
   const { data } = useQuery<TeamData>({ queryKey: ["/api/team"], refetchInterval: 2500 });
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [view, setView] = useState<"world" | "ring">("world");
+  const [view, setView] = useState<"town" | "world" | "ring">("town");
+  // Which company's office the Office view shows ("all" = everyone).
+  const [office, setOffice] = useState<number | "hq" | "all">("all");
+  const [selectedSim, setSelectedSim] = useState<number | null>(null);
+  const { data: town } = useQuery<TownData>({ queryKey: ["/api/town"], refetchInterval: 4000 });
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 900, h: 640 });
 
@@ -166,7 +172,7 @@ export default function Team() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <PageHeader title="Team" description="Watch AURORA and her agents work, live." />
           <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-            {(["world", "ring"] as const).map((v) => (
+            {(["town", "world", "ring"] as const).map((v) => (
               <button
                 key={v}
                 type="button"
@@ -174,7 +180,7 @@ export default function Team() {
                 aria-pressed={view === v}
                 className={cn("rounded px-2.5 py-1 capitalize", view === v ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:text-foreground")}
               >
-                {v === "world" ? "Office" : "Ring"}
+                {v === "town" ? "Town" : v === "world" ? "Office" : "Ring"}
               </button>
             ))}
           </div>
@@ -196,9 +202,27 @@ export default function Team() {
 
       <div className="flex min-h-0 flex-1">
         <div ref={stageRef} className="relative min-h-0 flex-1 overflow-auto">
-          {members.length > 0 && view === "world" ? (
+          {view === "town" && town ? (
             <div className="p-4 sm:p-6">
-              <TeamWorld members={members} handoffs={data?.recentHandoffs ?? []} flows={data?.pipelineFlows ?? []} selectedId={selectedId} onSelect={setSelectedId} />
+              <TownMap data={town} selectedSimId={selectedSim} onOpenCompany={(id) => { setOffice(id); setView("world"); }} onSelectSim={(id) => setSelectedSim(id === selectedSim ? null : id)} />
+            </div>
+          ) : members.length > 0 && view === "world" ? (
+            <div className="space-y-3 p-4 sm:p-6">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Office:</span>
+                <select value={String(office)} onChange={(e) => setOffice(e.target.value === "all" || e.target.value === "hq" ? e.target.value : Number(e.target.value))}
+                  className="rounded-md border border-border bg-transparent px-2 py-1">
+                  <option value="all">Everyone</option>
+                  <option value="hq">AURORA HQ</option>
+                  {(town?.companies ?? []).filter((c) => c.kind === "real").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <TeamWorld
+                members={office === "all" ? members : members.filter((m) => (office === "hq" ? m.companyId == null : m.companyId === office))}
+                handoffs={data?.recentHandoffs ?? []} flows={data?.pipelineFlows ?? []} chatter={data?.chatter ?? []}
+                leadId={typeof office === "number" ? town?.companies.find((c) => c.id === office)?.leadAgentId ?? null : null}
+                selectedId={selectedId} onSelect={setSelectedId}
+              />
             </div>
           ) : members.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No agents yet — create one on the Agents page.</div>
@@ -242,6 +266,42 @@ export default function Team() {
             </div>
           )}
         </div>
+
+        {view === "town" && selectedSim != null && (() => {
+          const c = town?.companies.find((x) => x.id === selectedSim);
+          if (!c) return null;
+          const news = (town?.events ?? []).filter((e) => e.companyId === c.id).slice(0, 8);
+          return (
+            <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-card/60 p-4 backdrop-blur animate-in">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-semibold">{c.name}</div>
+                  <div className="text-xs text-muted-foreground">{c.industry} · simulated</div>
+                </div>
+                <button type="button" className="opacity-60 hover:opacity-100" onClick={() => setSelectedSim(null)} title="Close"><X size={16} /></button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Sells: {c.product}</p>
+              <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md border border-border p-1.5"><dt className="text-[10px] text-muted-foreground">Cash</dt><dd className={c.cash < 0 ? "text-risk-high" : ""}>${Math.round(c.cash).toLocaleString()}</dd></div>
+                <div className="rounded-md border border-border p-1.5"><dt className="text-[10px] text-muted-foreground">Last day</dt><dd>${Math.round(c.revenueLast).toLocaleString()}</dd></div>
+                <div className="rounded-md border border-border p-1.5"><dt className="text-[10px] text-muted-foreground">Reputation</dt><dd>{c.reputation}</dd></div>
+              </dl>
+              <div className="mt-4 text-xs font-medium">Staff ({c.staff.length})</div>
+              <ul className="mt-1 space-y-1 text-xs">
+                {c.staff.map((s) => (
+                  <li key={s.id} className="flex items-center justify-between gap-2">
+                    <span>{s.name} <span className="text-muted-foreground">· {s.role}</span></span>
+                    <span className="text-[10px] text-muted-foreground">{s.mood}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 text-xs font-medium">Recent news</div>
+              <ul className="mt-1 space-y-1.5 text-xs leading-snug">
+                {news.length === 0 ? <li className="text-muted-foreground">Nothing yet.</li> : news.map((e) => <li key={e.id}>{e.text}</li>)}
+              </ul>
+            </aside>
+          );
+        })()}
 
         {selected && (
           <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-card/60 p-4 backdrop-blur animate-in">

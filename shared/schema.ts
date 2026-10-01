@@ -190,6 +190,8 @@ export const agents = sqliteTable("agents", {
   // Short job title shown in the UI ("Overseer", "Content Writer"). Falls
   // back to a generic label when unset.
   role: text("role"),
+  // Which company this agent works for (see server/companies.ts). Null = HQ.
+  companyId: integer("company_id"),
   // AURORA herself — the one overseer agent that answers only to the owner,
   // supervises every other agent, and can spawn/retask them. Exactly one row
   // has this set (seeded at startup, see seedOverseerIfMissing).

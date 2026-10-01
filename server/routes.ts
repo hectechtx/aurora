@@ -52,6 +52,8 @@ import { getElectronApis } from "./electron-bridge";
 import { listBrowserSessions, showBrowserSession, closeBrowserSession } from "./browser-tool";
 import { parseStages, describeSchedule, parseSchedule, upsertPipeline, startPipelineRun } from "./pipelines";
 import { recentChatter } from "./world";
+import { getCompanies, getResidents, getWorldEvents } from "./companies";
+import { currentSimDay } from "./simulation";
 import { log } from "./app";
 
 /** Parses a route :id param, writing a 400 and returning null if it isn't a real integer — a malformed/non-numeric id would otherwise flow into a Drizzle query as NaN. */
@@ -675,6 +677,25 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
     res.json(rels.map((r) => ({ ...r, otherAgentName: nameById.get(r.otherAgentId) ?? "unknown" })));
   });
 
+  // ---- Town: companies (real + simulated), residents, news ----
+  app.get("/api/town", async (_req, res) => {
+    const agentsList = await storage().getAgents();
+    const working = new Set(agentsWorkingNow());
+    const companies = getCompanies().map((c) => {
+      const staff = c.kind === "real"
+        ? agentsList.filter((a) => a.companyId === c.id).map((a) => ({
+          id: a.id, name: a.name.trim(), role: a.role, avatarPath: a.avatarPath, status: a.status,
+          working: working.has(a.id), isLead: a.id === c.leadAgentId,
+        }))
+        : getResidents(c.id).map((r) => ({ id: r.id, name: r.name, role: r.role, avatarPath: null, status: "active", working: false, isLead: r.role === "Founder", mood: r.mood }));
+      return { ...c, staff };
+    });
+    const hq = agentsList.filter((a) => a.companyId == null).map((a) => ({
+      id: a.id, name: a.name.trim(), role: a.role, avatarPath: a.avatarPath, status: a.status, working: working.has(a.id), isLead: a.isOverseer,
+    }));
+    res.json({ simDay: currentSimDay(), companies, hq, events: getWorldEvents(40) });
+  });
+
   // ---- Pipelines (multi-agent workflows; see pipelines.ts) ----
   app.get("/api/pipelines", async (_req, res) => {
     const [all, agentsList] = await Promise.all([storage().getPipelines(), storage().getAgents()]);
@@ -759,7 +780,7 @@ export async function registerRoutes(_httpServer: Server, app: Express): Promise
         ? queue.find((q) => q.status === "in_progress")
         : queue.find((q) => q.status === "awaiting_approval");
       return {
-        id: a.id, name: a.name.trim(), role: a.role, isOverseer: a.isOverseer, status: a.status,
+        id: a.id, name: a.name.trim(), role: a.role, isOverseer: a.isOverseer, status: a.status, companyId: a.companyId,
         avatarPath: a.avatarPath, mood: a.mood, energy: a.energy, morale: a.morale,
         lastRunAt: a.lastRunAt, scheduleMinutes: a.scheduleMinutes, spawnedByAgentId: a.spawnedByAgentId,
         working: working.has(a.id),

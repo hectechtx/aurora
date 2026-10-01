@@ -12,6 +12,7 @@
 // chat, and the agent's result is posted back into that chat when it's done.
 import { getStorage } from "./storage";
 import type { Agent, AgentQueueItem, Pipeline, PipelineStage } from "@shared/schema";
+import { addWorldEvent, getCompany } from "./companies";
 
 export const MAX_PIPELINE_STAGES = 8;
 // A run "running" for longer than this is assumed dead (crash, restart mid-stage)
@@ -113,7 +114,7 @@ export async function onQueueItemFinished(queueItemId: number, status: "final" |
 
   if (item.pipelineRunId == null) {
     if (item.originTaskId) {
-      const ask = item.content.replace(/^\[[^\]]*\]\s*/, "").split("\n")[0].slice(0, 120);
+      const ask = item.content.replace(/^\[[^\]]*\]:?\s*/, "").split("\n")[0].slice(0, 120);
       await postToChat(item.originTaskId, item.agentId, status === "error"
         ? `**${agentName}** couldn't finish "${ask}": ${reply || "something went wrong"}`
         : `**${agentName}** finished "${ask}":\n\n${reply}`);
@@ -165,6 +166,8 @@ export async function onQueueItemFinished(queueItemId: number, status: "final" |
     body: reply,
   });
   await storage.log(`pipeline done: ${pipeline.name}`, `run #${run.id}`);
+  const company = agent?.companyId != null ? getCompany(agent.companyId) : undefined;
+  addWorldEvent("delivered", `${company?.name ?? "AURORA HQ"} delivered "${pipeline.name}" (${stages.length} step${stages.length === 1 ? "" : "s"}, finished by ${agentName}).`, company?.id ?? null);
   await postToChat(run.originTaskId, item.agentId, `Pipeline **${pipeline.name}** is done — the result is in your Outbox too.\n\n${reply}`);
 }
 

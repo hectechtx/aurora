@@ -20,6 +20,7 @@ import { searchAndDownloadTrack } from "./musicsearch";
 import { webSearch, webFetch, fetchImageBytes } from "./web-tools";
 import { browseInteract, BrowserToolError, READ_ONLY_ACTIONS, type BrowseAction } from "./browser-tool";
 import { trendingVideos, youtubeSearch, videoTranscript, newsHeadlines, saveDocument, makeVoiceover, VOICE_IDS } from "./content-tools";
+import { getCompanies } from "./companies";
 import { findAgentByName, upsertPipeline, startPipelineRun, summarizePipeline, onQueueItemFinished, setPipelineNudge } from "./pipelines";
 import type { Agent, AgentConfig, SkillTool, Approval, TaskAgent } from "@shared/schema";
 import { getCreationsDir, SELF_SOURCE_DIR } from "./paths";
@@ -39,7 +40,7 @@ const MAX_STEPS = 20;
 const MAX_HANDOFF_DEPTH = 4;
 // Roster ceiling for spawn_agent — bounds an autonomous team so a spawn loop
 // can't flood the roster. The owner raises headroom by deleting agents.
-const MAX_AGENTS = 24;
+const MAX_AGENTS = 100;
 // Tag that marks a deliverable as an agent's question to the owner (see the
 // ask_owner tool). The Outbox renders these with an answer box, and answering
 // routes the reply back to the asking agent's queue.
@@ -532,26 +533,47 @@ async function getOtherAgents(selfId: number): Promise<Agent[]> {
  * pasted-in multi-paragraph job postings that would swamp a 9B model's context.
  */
 async function describeTeamForLead(): Promise<string> {
-  const team = (await getStorage().getAgents()).filter((a) => !a.isOverseer);
-  if (team.length === 0) return "";
-  const list = team
-    .map((a) => `- ${a.name.trim()}${a.role ? ` (${a.role})` : ""}${a.status !== "active" ? " [paused]" : ""}: ${a.jobDescription.replace(/\s+/g, " ").slice(0, 160)}`)
-    .join("\n");
+  const agents = await getStorage().getAgents();
+  const companies = getCompanies().filter((c) => c.kind === "real");
+  if (agents.length <= 1) return "";
+  const line = (a: Agent) => `${a.name.trim()}${a.role ? ` (${a.role})` : ""}${a.status !== "active" ? " [paused]" : ""}`;
+  const blocks = companies.map((c) => {
+    const members = agents.filter((a) => a.companyId === c.id);
+    const lead = members.find((a) => a.id === c.leadAgentId);
+    return `- ${c.name} — ${c.mission}\n  Lead: ${lead ? line(lead) : "none"}. Team: ${members.filter((a) => a !== lead).map(line).join(", ") || "none"}`;
+  });
+  const hq = agents.filter((a) => !a.isOverseer && a.companyId == null);
+  if (hq.length) blocks.push(`- HQ (reports to you): ${hq.map(line).join(", ")}`);
   return (
-    `\n\nYou lead a team of agents who work in the background with their own tools:\n${list}\n\n` +
-    "When the owner wants something done by someone, done regularly, or done in several stages, put the team on it instead of doing " +
-    "everything yourself: hand one job to the best-fit agent with delegate_to_agent, or build a multi-step workflow with create_pipeline " +
-    "(each step's output feeds the next; use a schedule for recurring work). Then tell the owner plainly who's on it and what happens next."
+    `\n\nYou run AURORA's organization — these companies and their agents work in the background with their own tools:\n${blocks.join("\n")}\n\n` +
+    "When the owner wants something done by someone, done regularly, or done in several stages, put the right company on it instead of " +
+    "doing everything yourself: hand one job to the best-fit agent with delegate_to_agent, or build a multi-step workflow with create_pipeline " +
+    "(steps can span companies, e.g. research -> script -> legal review -> promotion; use a schedule for recurring work). " +
+    "Then tell the owner plainly who's on it and what happens next."
   );
 }
 
+/** What an agent knows about the organization: its own company's colleagues in full, plus who leads every other company. */
 async function describeOtherAgents(selfId: number): Promise<string> {
   const others = await getOtherAgents(selfId);
   if (others.length === 0) return "";
-  const list = others
-    .map((a) => `- ${a.name}${a.role ? ` (${a.role})` : ""}${a.status !== "active" ? " [paused]" : ""}: ${a.jobDescription}`)
-    .join("\n");
-  return `\n\nOther agents on this team, reachable with handoff_to_agent (to hand off work outright) or message_agent (to ask something or share a finding):\n${list}\n\nReach out when their job genuinely overlaps with something you need — don't force it if there's no real reason to.`;
+  const self = await getStorage().getAgent(selfId);
+  const companies = getCompanies();
+  const mine = companies.find((c) => c.id === self?.companyId);
+  const colleagues = others.filter((a) => a.companyId != null && a.companyId === self?.companyId);
+  const fmt = (a: Agent) => `- ${a.name.trim()}${a.role ? ` (${a.role})` : ""}${a.status !== "active" ? " [paused]" : ""}: ${a.jobDescription.replace(/\s+/g, " ").slice(0, 200)}`;
+  const leads = companies
+    .filter((c) => c.kind === "real" && c.id !== self?.companyId && c.leadAgentId)
+    .map((c) => { const lead = others.find((a) => a.id === c.leadAgentId); return lead ? `- ${c.name}: ${lead.name.trim()} (${lead.role ?? "lead"}) — ${c.mission}` : null; })
+    .filter(Boolean);
+  const overseer = others.find((a) => a.isOverseer);
+  return (
+    (mine ? `\n\nYou work at ${mine.name}: ${mine.mission}` : "") +
+    (colleagues.length ? `\nYour colleagues there:\n${colleagues.map(fmt).join("\n")}` : "") +
+    (leads.length ? `\nOther companies in the organization (reach them through their lead):\n${leads.join("\n")}` : "") +
+    (overseer ? `\n${overseer.name.trim()} runs the whole organization.` : "") +
+    "\nUse handoff_to_agent to hand off work outright and message_agent to ask or share something. Reach out when it genuinely helps the work."
+  );
 }
 
 /**
@@ -1595,9 +1617,20 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
   }
 
   if (depth >= MAX_STEPS) {
-    const reply = "I hit my step limit for this turn without finishing — try breaking the request into smaller steps.";
+    // Out of tool budget: don't throw away everything gathered so far (a
+    // researcher's 60 searches ended as "I hit my step limit") — make one
+    // last tool-free call to write the answer from what's already in hand.
+    let reply = "";
+    try {
+      const wrap = await chat(config.ollamaHost, config.model, [
+        ...messages,
+        { role: "user", content: "You've used your tool budget for this turn. Using everything you've gathered above, write your final answer or report now — clearly and completely. No more tool calls." },
+      ], [], config.numCtx, { think: false });
+      reply = stripStrayToolJson(wrap.message.content ?? "");
+    } catch { /* fall through to the plain notice */ }
+    if (!reply) reply = "I ran out of steps for this turn before finishing — " + (summarizeTranscript(transcript) || "try breaking the request into smaller steps.");
     await updateMessage(ctx, messageId, reply, transcript.length ? JSON.stringify(transcript) : null);
-    return { status: "final", reply };
+    return { status: "final", reply, usedTools: transcript.length > 0, planOpen: planStateOf(transcript) };
   }
 
   const tools = await allTools(ctx, config.advancedToolsEnabled);
@@ -1659,6 +1692,15 @@ async function runLoop(ctx: RunContext, messages: OllamaMessage[], config: Agent
       messages.push({ role: "tool", content: `error: unknown tool "${name}"` });
       transcript.push({ name, args, risk: "high", status: "error", result: "unknown tool" });
       await updateMessage(ctx, messageId, "", JSON.stringify(transcript), thinking);
+      continue;
+    }
+
+    // Loop breaker: the exact same call again in one turn (measured: a
+    // researcher re-ran near-identical searches ~60 times) — answer from the
+    // earlier result instead of spending another step on it.
+    const sig = JSON.stringify(args);
+    if (name !== "set_plan" && transcript.some((t) => t.name === name && JSON.stringify(t.args) === sig)) {
+      messages.push({ role: "tool", content: `You already ran ${name} with these exact arguments this turn — its result is above. Use it, try something genuinely different, or write your answer.` });
       continue;
     }
 

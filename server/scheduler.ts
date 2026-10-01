@@ -8,6 +8,7 @@
 import { getStorage } from "./storage";
 import { runAgentTick, agentsWorkingNow } from "./agent-loop";
 import { worldTick } from "./world";
+import { simulationTick } from "./simulation";
 import { log } from "./app";
 import { duePipelines, startPipelineRun } from "./pipelines";
 
@@ -66,6 +67,9 @@ export function startScheduler(): void {
       if (due) dueAgents.push({ agent, urgent });
     }
     dueAgents.sort((a, b) => Number(b.urgent) - Number(a.urgent));
+
+    // The simulated companies' economy (rules only, no LLM).
+    try { simulationTick(now); } catch (err) { log(`simulation tick failed: ${err instanceof Error ? err.message : String(err)}`, "scheduler"); }
 
     // World upkeep (rest, the occasional lounge chat) — before the ticks,
     // and it skips the LLM part entirely whenever real work is waiting.
